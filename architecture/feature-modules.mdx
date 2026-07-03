@@ -1,0 +1,406 @@
+---
+title: "Feature modules: structure, ownership, and data flow"
+sidebarTitle: "Feature Modules"
+description: "Each feature module in Real Estate Template owns its full vertical slice. Learn how properties, agents, and developments are structured and how data flows from service to component."
+---
+
+A **feature module** in Real Estate Template is a self-contained directory that owns everything needed to deliver one business capability — its domain types, runtime validation schemas, static data, service logic, Pinia store, composables, constants, and Vue components all live together under `features/<name>/`. Nothing outside the feature needs to know how it works internally; pages and other features interact with it only through the service and the component props that service data flows into.
+
+## Anatomy of a feature module
+
+The `features/properties/` directory is the most complete feature in the template and serves as the canonical example. Every sub-folder has a specific role:
+
+```txt
+features/
+└── properties/
+    ├── api/                       # (future) $fetch wrappers for API endpoints
+    │   ├── get-properties.ts
+    │   └── get-property.ts
+    │
+    ├── components/                # Domain-aware Vue components
+    │   ├── PropertyCard.vue       # Single property card (receives Property prop)
+    │   ├── PropertyFilters.vue    # Filter controls (emits filter changes)
+    │   ├── PropertyGallery.vue    # Image gallery / lightbox
+    │   ├── PropertyFeatures.vue   # Bedrooms / bathrooms / size grid
+    │   ├── PropertyMap.vue        # Location map embed
+    │   ├── PropertyContactForm.vue
+    │   └── PropertyGrid.vue       # Responsive grid of PropertyCard instances
+    │
+    ├── composables/
+    │   └── useProperties.ts       # Reactive wrapper around the service
+    │
+    ├── constants/
+    │   └── property-types.ts      # PROPERTY_TYPE_OPTIONS, OPERATION_TYPE_OPTIONS
+    │
+    ├── data/
+    │   └── properties.ts          # Static MVP data (validated at load time)
+    │
+    ├── schemas/
+    │   └── property.schema.ts     # Zod runtime validation schema
+    │
+    ├── services/
+    │   └── properties.service.ts  # Business logic: getAll, getBySlug, filter, …
+    │
+    ├── stores/
+    │   └── properties.store.ts    # Pinia store for reactive listing state
+    │
+    ├── types/
+    │   └── property.types.ts      # TypeScript domain types (canonical shape)
+    │
+    └── utils/
+        └── property.helpers.ts    # Feature-local pure helpers
+```
+
+<Note>
+  Not every feature uses every folder. Only create folders when there is code to put in them. The `contact/` feature, for example, has no data layer and no store — it only has a component, a schema, and a service.
+</Note>
+
+## The properties feature in detail
+
+### 1. Domain types (`types/property.types.ts`)
+
+The TypeScript interfaces are the authoritative shape for the domain. They are backend-compatible by design so the static MVP data can be replaced by a real API response without touching any component.
+
+```ts
+// features/properties/types/property.types.ts
+
+export type PropertyOperationType = 'sale' | 'rent'
+
+export type PropertyType =
+  | 'house'
+  | 'apartment'
+  | 'land'
+  | 'commercial'
+  | 'office'
+
+export type PropertyStatus =
+  | 'available'
+  | 'sold'
+  | 'rented'
+  | 'reserved'
+  | 'hidden'
+
+export interface Property {
+  id: string
+  title: string
+  slug: string
+  description: string
+  operationType: PropertyOperationType
+  propertyType: PropertyType
+  price: number
+  currency: string
+  location: string
+  city: string
+  state: string
+  country: string
+  bedrooms?: number
+  bathrooms?: number
+  parkingSpaces?: number
+  sizeUnit?: MeasurementUnit
+  constructionSize?: number
+  landSize?: number
+  images: string[]
+  coverImage: string
+  amenities: string[]
+  developmentId?: string
+  agentId?: string
+  coordinates?: PropertyCoordinates
+  status: PropertyStatus
+  featured: boolean
+}
+```
+
+### 2. Zod schema (`schemas/property.schema.ts`)
+
+The Zod schema mirrors the TypeScript interfaces and acts as the **runtime boundary**. Data flowing into the application — today from the static file, tomorrow from a CMS or REST endpoint — is validated here before services or components ever see it.
+
+```ts
+// features/properties/schemas/property.schema.ts
+import { z } from 'zod'
+
+export const propertySchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  slug: z.string().min(1),
+  description: z.string().min(1),
+  operationType: z.enum(['sale', 'rent']),
+  propertyType: z.enum(['house', 'apartment', 'land', 'commercial', 'office']),
+  price: z.number().nonnegative(),
+  currency: z.string().min(1),
+  location: z.string().min(1),
+  city: z.string().min(1),
+  state: z.string().min(1),
+  country: z.string().min(1),
+  bedrooms: z.number().int().nonnegative().optional(),
+  bathrooms: z.number().nonnegative().optional(),
+  parkingSpaces: z.number().int().nonnegative().optional(),
+  sizeUnit: z.enum(['metric', 'imperial']).optional(),
+  constructionSize: z.number().nonnegative().optional(),
+  landSize: z.number().nonnegative().optional(),
+  images: z.array(z.string().min(1)),
+  coverImage: z.string().min(1),
+  amenities: z.array(z.string().min(1)),
+  developmentId: z.string().optional(),
+  agentId: z.string().optional(),
+  coordinates: z.object({ lat: z.number(), lng: z.number() }).optional(),
+  status: z.enum(['available', 'sold', 'rented', 'reserved', 'hidden']),
+  featured: z.boolean(),
+})
+
+export const propertyListSchema = z.array(propertySchema)
+
+// Compile-time guard: the schema output and the hand-written interface must
+// stay structurally identical. If either side changes, this fails to compile.
+export type PropertyInput = z.infer<typeof propertySchema>
+const _typeCheck: PropertyInput extends Property
+  ? Property extends PropertyInput
+    ? true
+    : never
+  : never = true
+void _typeCheck
+```
+
+### 3. Service (`services/properties.service.ts`)
+
+The service is where all business logic lives. Components and pages never touch the data layer directly — they always go through `propertiesService`. The service interface is stable, so swapping the data source (static file → API) only requires changing the service implementation.
+
+<Tabs>
+  <Tab title="getAll / getBySlug">
+    ```ts
+    // features/properties/services/properties.service.ts
+    import type { Property } from '../types/property.types'
+    import { sampleProperties } from '../data/properties'
+
+    export const propertiesService = {
+      /** All visible properties (excludes hidden ones). */
+      getAll(): Property[] {
+        return sampleProperties.filter(property => property.status !== 'hidden')
+      },
+
+      /**
+       * Look up a single visible property by its slug. Returns `undefined`
+       * when the property does not exist or is hidden, so callers can map
+       * that to a proper 404.
+       */
+      getBySlug(slug: string): Property | undefined {
+        return sampleProperties.find(
+          property => property.slug === slug && property.status !== 'hidden',
+        )
+      },
+    }
+    ```
+  </Tab>
+  <Tab title="filter">
+    ```ts
+    export const propertiesService = {
+      /**
+       * Filter the visible catalog by operation type, property type, and
+       * location (accent-insensitive substring match), then sort.
+       * Empty/undefined filter values are treated as "no constraint".
+       */
+      filter(filters: PropertyFilters, sort: PropertySort = 'featured'): Property[] {
+        const operation = normalize(filters.operation)
+        const type = normalize(filters.type)
+        const location = normalizeText(filters.location)
+
+        const filtered = this.getAll().filter((property) => {
+          if (operation && normalize(property.operationType) !== operation) return false
+          if (type && normalize(property.propertyType) !== type) return false
+          if (location) {
+            const haystack = [property.location, property.city, property.state, property.country]
+              .map(normalizeText)
+              .join(' ')
+            if (!haystack.includes(location)) return false
+          }
+          return true
+        })
+
+        const sorted = [...filtered]
+        switch (sort) {
+          case 'price-asc':
+            sorted.sort((a, b) => a.price - b.price || a.id.localeCompare(b.id))
+            break
+          case 'price-desc':
+            sorted.sort((a, b) => b.price - a.price || a.id.localeCompare(b.id))
+            break
+          case 'featured':
+          default:
+            sorted.sort((a, b) => {
+              if (a.featured !== b.featured) return a.featured ? -1 : 1
+              return a.id.localeCompare(b.id)
+            })
+        }
+        return sorted
+      },
+    }
+    ```
+  </Tab>
+  <Tab title="getFeatured / getRelated">
+    ```ts
+    export const propertiesService = {
+      /**
+       * Featured properties for homepage showcases.
+       * @param limit Optional cap on the result count.
+       */
+      getFeatured(limit?: number): Property[] {
+        const featured = this.getAll().filter(property => property.featured)
+        return typeof limit === 'number' ? featured.slice(0, limit) : featured
+      },
+
+      /**
+       * Weighted similarity score to find related listings for the detail page.
+       * Scoring:  +3 same propertyType  |  +2 same operationType
+       *           +2 same city          |  +1 same country (when city differs)
+       *           +2 same developmentId |  +1 same agentId
+       *           +1 price within 30%
+       * Falls back to getFeatured(limit) when no positive-score candidates exist.
+       */
+      getRelated(current: Property, limit = 3): Property[] {
+        // … see full source for scoring implementation
+      },
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### 4. Static data (`data/properties.ts`)
+
+For the MVP, `data/properties.ts` is the raw data source. It exports `sampleProperties`, an array validated against `propertyListSchema` at module load time. In a later phase, the service's `getAll()` and `getBySlug()` methods will call `api/get-properties.ts` (which uses `$fetch`) instead — zero changes to any component.
+
+### 5. Constants (`constants/property-types.ts`)
+
+UI constants that enumerate valid domain values live in `constants/`. They wire TypeScript types to i18n keys and Nuxt Icon names so no component duplicates that mapping:
+
+```ts
+// features/properties/constants/property-types.ts
+export const PROPERTY_TYPE_OPTIONS: PropertyTypeOption[] = [
+  { value: 'house',      labelKey: 'properties.types.house',      icon: 'mdi:home-outline' },
+  { value: 'apartment',  labelKey: 'properties.types.apartment',  icon: 'mdi:office-building-outline' },
+  { value: 'land',       labelKey: 'properties.types.land',       icon: 'mdi:image-filter-hdr' },
+  { value: 'commercial', labelKey: 'properties.types.commercial', icon: 'mdi:storefront-outline' },
+  { value: 'office',     labelKey: 'properties.types.office',     icon: 'mdi:briefcase-outline' },
+]
+
+export const OPERATION_TYPE_OPTIONS: PropertyOperationOption[] = [
+  { value: 'sale', labelKey: 'properties.operations.sale' },
+  { value: 'rent', labelKey: 'properties.operations.rent' },
+]
+```
+
+### 6. Components
+
+Feature components receive typed props and emit events. They never fetch their own data.
+
+```ts
+// features/properties/components/PropertyCard.vue (script setup)
+import type { Property } from '../types/property.types'
+
+defineProps<{
+  property: Property
+}>()
+```
+
+`PropertyGrid.vue` composes `PropertyCard` instances and receives the full list as a prop. `PropertyGallery.vue` receives the `images` and `coverImage` arrays. None of them call a service directly — the page calls the service and passes the result down.
+
+## Data flow diagram
+
+```
+┌──────────────────────────────────────────────────┐
+│                    PAGE                          │
+│  pages/properties/index.vue                      │
+│                                                  │
+│  const props = await propertiesService.filter(  │
+│    { operation, type, location }, sort           │
+│  )                                               │
+└───────────────────────┬──────────────────────────┘
+                        │ calls
+┌───────────────────────▼──────────────────────────┐
+│              PROPERTIES SERVICE                  │
+│  features/properties/services/                   │
+│  properties.service.ts                           │
+│                                                  │
+│  Reads sampleProperties, applies filters,        │
+│  sorts, returns Property[]                       │
+└───────────────────────┬──────────────────────────┘
+                        │ reads
+┌───────────────────────▼──────────────────────────┐
+│              STATIC DATA (MVP)                   │
+│  features/properties/data/properties.ts          │
+│  (validated by propertyListSchema at load time)  │
+└───────────────────────┬──────────────────────────┘
+                        │ props
+┌───────────────────────▼──────────────────────────┐
+│                 COMPONENTS                       │
+│  <PropertyGrid :properties="props" />            │
+│    └── <PropertyCard :property="p" />            │
+└──────────────────────────────────────────────────┘
+```
+
+<Note>
+  The arrow direction is strictly downward. No component reaches upward into a service or store. The page is the only orchestrator.
+</Note>
+
+## The `PropertySort` type guard
+
+URL query parameters arrive as `string | string[]`. The `isPropertySort` type guard narrows raw query values to the `PropertySort` union before they reach the service, preventing invalid sort values from propagating:
+
+```ts
+// features/properties/services/properties.service.ts
+export type PropertySort = 'featured' | 'price-asc' | 'price-desc'
+
+const VALID_SORTS: readonly PropertySort[] = ['featured', 'price-asc', 'price-desc'] as const
+
+export function isPropertySort(value: unknown): value is PropertySort {
+  return typeof value === 'string' && (VALID_SORTS as readonly string[]).includes(value)
+}
+```
+
+A page uses it like this:
+
+```ts
+// pages/properties/index.vue
+import { isPropertySort } from '~/features/properties/services/properties.service'
+
+const rawSort = route.query.sort
+const sort = isPropertySort(rawSort) ? rawSort : 'featured'
+const properties = propertiesService.filter(filters, sort)
+```
+
+## The same pattern across other features
+
+`agents/`, `developments/`, `home/`, and `search/` all follow the same vertical-slice structure. Each has its own types, schemas, service, and components. They do not share implementation details — they only share the convention.
+
+<CardGroup cols={3}>
+  <Card title="agents/" icon="user">
+    `AgentCard`, `AgentGrid` components. `agentsService.getAll()` and `getBySlug()`. Types define `Agent` with `name`, `slug`, `phone`, `email`, `bio`, `photo`, and `agentId`.
+  </Card>
+  <Card title="developments/" icon="building">
+    `DevelopmentCard`, `DevelopmentGallery` components. `developmentsService` with similar filter/getBySlug surface. Properties link back via `developmentId`.
+  </Card>
+  <Card title="home/" icon="house">
+    Homepage-specific section components (`HomeHero`, `HomeFeatured`, `HomeLocations`). No store — composed from `propertiesService.getFeatured()` called at the page level.
+  </Card>
+</CardGroup>
+
+## Extending a feature
+
+Adding a new field to the `Property` model is a four-step process that never touches global code:
+
+<Steps>
+  <Step title="Update the TypeScript type">
+    Add the new field to `features/properties/types/property.types.ts`. TypeScript will immediately flag every place that constructs a `Property` without the new field.
+  </Step>
+  <Step title="Update the Zod schema">
+    Mirror the change in `features/properties/schemas/property.schema.ts`. The compile-time structural guard (`_typeCheck`) will fail to compile if the schema and the interface drift apart.
+  </Step>
+  <Step title="Update the data file">
+    Add the field to the records in `features/properties/data/properties.ts`. The `propertyListSchema.parse()` call at module load will throw at runtime if any record is missing a required field.
+  </Step>
+  <Step title="Update the component prop usage">
+    Display or use the new field in the relevant feature component. Because props are typed, the component's `defineProps<{ property: Property }>()` now includes the field automatically — no other configuration required.
+  </Step>
+</Steps>
+
+<Tip>
+  When the MVP data layer is replaced by a real API, only steps 3 and the `api/` layer change. The types, schemas, and components remain identical — that is the point of keeping the service as the sole data access boundary.
+</Tip>

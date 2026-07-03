@@ -1,0 +1,173 @@
+---
+title: "Feature-first architecture and project conventions"
+sidebarTitle: "Overview"
+description: "Real Estate Template uses a feature-first layout where each business module owns its components, services, types, and data. Global infrastructure lives outside features."
+---
+
+Real Estate Template is built around a **feature-first architecture**: rather than grouping every component in one folder and every service in another, each business domain owns its entire vertical slice. The `features/properties/` directory holds the property types, Zod schemas, service logic, static data, Pinia store, composables, and all presentational components that deal with properties — and nothing else touches them without going through the service. This makes it straightforward to extend, replace, or even extract a feature into a package without hunting across the whole codebase.
+
+## Layer responsibilities
+
+The table below shows the responsibility of each layer. Pages are intentionally thin — they load data, set SEO metadata, and assemble feature components. All business logic travels downward through services and composables, never sideways through shared mutable state.
+
+| Layer | Location | Responsibility |
+|---|---|---|
+| **Pages** | `pages/` | Data loading, SEO metadata, layout composition — no business logic |
+| **Services** | `features/*/services/` | Business logic, filtering, sorting, data transformation |
+| **Stores** | `features/*/stores/`, `stores/` | Shared reactive state (Pinia) — feature stores stay local |
+| **Composables** | `features/*/composables/`, `core/composables/` | Reusable reactive logic wrapping services or Vue state |
+| **Components** | `features/*/components/`, `components/{ui,layout,shared}/` | Display only — typed props in, events out, no direct data fetching |
+| **Schemas** | `features/*/schemas/` | Zod runtime validation at the data-ingestion boundary |
+| **Types** | `features/*/types/`, `types/` | TypeScript domain types — the single source of truth for shapes |
+| **Data** | `features/*/data/` | Static MVP data source — swapped for API calls in future phases |
+
+## Project folder map
+
+```txt
+./
+├── assets/           # CSS, fonts, icons, images
+│
+├── components/
+│   ├── ui/           # Base* primitives (BaseButton, BaseCard, …)
+│   ├── layout/       # App* layout shells (AppHeader, AppFooter, …)
+│   └── shared/       # Cross-feature shared pieces (CurrencyText, EmptyState, …)
+│
+├── composables/      # Global Nuxt/Vue composables
+├── config/           # Agency configs, navigation, SEO defaults
+├── content/          # Future Nuxt Content markdown files
+│
+├── core/
+│   ├── composables/  # Business-agnostic composables (usePageSeo, useJsonLd)
+│   ├── services/     # Infrastructure services
+│   ├── types/        # Infrastructure types
+│   └── utils/        # Pure helpers (formatCurrency, themeToCssVars, …)
+│
+├── features/
+│   ├── home/
+│   ├── properties/
+│   ├── developments/
+│   ├── agents/
+│   ├── contact/
+│   ├── leads/
+│   ├── search/
+│   └── shared/
+│
+├── i18n/locales/     # en.json, es.json
+├── layouts/          # Nuxt layouts
+├── lib/              # Third-party adapters
+├── middleware/       # Nuxt route middleware
+├── pages/            # File-based routes (thin data loaders)
+├── plugins/          # Nuxt plugins (theme injection, etc.)
+├── public/           # Static files served at root
+├── server/           # Nitro server routes (sitemap, robots.txt, …)
+├── stores/           # Global Pinia stores (app, ui, locale, site)
+├── themes/           # CSS variable definitions per theme
+├── types/            # Global TypeScript types
+└── utils/            # Global utility functions
+```
+
+## Global vs feature-owned code
+
+Understanding what belongs where is the most important architectural rule. Use this mental model:
+
+<CardGroup cols={2}>
+  <Card title="Inside features/" icon="folder">
+    Code that understands a specific business domain. `PropertyCard.vue` knows what a `Property` is; `propertiesService` knows how to filter and sort them. Neither can live in `components/ui/` or `core/` because they carry domain knowledge.
+  </Card>
+  <Card title="Outside features/" icon="globe">
+    Code with zero domain awareness. `BaseButton.vue` has no idea what a property is. `formatCurrency()` just formats numbers. `usePageSeo()` just builds meta tags. These are safe to import from anywhere.
+  </Card>
+</CardGroup>
+
+### Global component folders
+
+Three global component directories are registered with `pathPrefix: false` in `nuxt.config.ts`, meaning they auto-import **by filename** — no path segment needed:
+
+```ts
+// nuxt.config.ts
+components: [
+  { path: '~/components/ui',     pathPrefix: false },
+  { path: '~/components/layout', pathPrefix: false },
+  { path: '~/components/shared', pathPrefix: false },
+  { path: '~/features', pattern: '**/components/**', pathPrefix: false },
+],
+```
+
+So `<BaseButton>` resolves to `components/ui/BaseButton.vue`, `<AppHeader>` resolves to `components/layout/AppHeader.vue`, and `<PropertyCard>` resolves to `features/properties/components/PropertyCard.vue` — all without path prefixes in templates.
+
+<Note>
+  Feature `*/components/**` folders are also scanned so feature components are globally available in templates. This lets pages use `<PropertyGrid>` without a manual import, while the file remains owned by its feature.
+</Note>
+
+## Auto-import rules for composables
+
+In addition to components, `nuxt.config.ts` extends Nuxt's auto-import scanning to cover the core layer and all feature composables and stores:
+
+```ts
+// nuxt.config.ts
+imports: {
+  dirs: [
+    '~/core/composables',
+    '~/features/**/composables',
+    '~/features/**/stores',
+  ],
+},
+```
+
+This means composables like `useProperties()` (inside `features/properties/composables/`) are available without an explicit import in `.vue` files. However, page-level SEO helpers — `usePageSeo` and `useJsonLd` — are kept out of the auto-import scope by design (they live in `core/composables/` but pages import them explicitly to keep SEO logic auditable at the call site).
+
+## Architecture layer stack
+
+```
+┌──────────────────────────────────────────────────────┐
+│                      PAGES                           │
+│    pages/index.vue, pages/properties/[slug].vue …    │
+│    Thin: data load + useSeoMeta + component compose  │
+└──────────────────────┬───────────────────────────────┘
+                       │  calls
+┌──────────────────────▼───────────────────────────────┐
+│             SERVICES / COMPOSABLES                   │
+│    features/properties/services/properties.service   │
+│    core/composables/usePageSeo, useJsonLd            │
+└──────────────────────┬───────────────────────────────┘
+                       │  reads
+┌──────────────────────▼───────────────────────────────┐
+│              DATA / API / STORES                     │
+│    features/properties/data/properties.ts (MVP)      │
+│    features/properties/stores/properties.store.ts    │
+└──────────────────────┬───────────────────────────────┘
+                       │  props
+┌──────────────────────▼───────────────────────────────┐
+│                  COMPONENTS                          │
+│    features/properties/components/PropertyCard.vue   │
+│    components/ui/BaseButton.vue                      │
+└──────────────────────────────────────────────────────┘
+```
+
+## Architectural rules
+
+These rules are enforced by convention and by code review. Violating them tends to create the coupling problems feature-first architecture is designed to prevent.
+
+<Accordion title="No feature-specific code in global folders">
+  `components/ui/`, `components/layout/`, `components/shared/`, `core/`, and `utils/` must remain business-agnostic. A `BaseCard` does not know what a `Property` is. An `AppHeader` does not hard-code property navigation. Any code that references a feature's domain type belongs inside that feature's directory.
+</Accordion>
+
+<Accordion title="No API calls or data fetching inside presentational components">
+  Components receive data through typed props. They emit events. They never call `$fetch`, a service method, or a Pinia action directly. Data fetching is the page's job; business logic is the service's job. Keeping components data-free makes them trivially reusable and testable.
+</Accordion>
+
+<Accordion title="Business logic lives in services and composables — not in pages">
+  Pages should read like a wiring diagram: call the service, pass the result to a component, set SEO. Complex filtering, sorting, scoring, and transformation belong in `features/*/services/` or `features/*/composables/`. This keeps pages readable and makes the logic reusable across multiple routes.
+</Accordion>
+
+<Accordion title="No hardcoded visible text — use i18n keys">
+  Every user-visible string in a component must be an `$t('some.key')` call. Raw English strings in templates are not acceptable. This applies equally to validation error messages, empty-state labels, and aria attributes. Exceptions: data that originates from an agency's content files (property titles, descriptions) is already locale-managed by the agency.
+</Accordion>
+
+<Accordion title="Validation at the data boundary — not in components">
+  Zod schemas in `features/*/schemas/` validate data when it enters the application (e.g. when the static data file is loaded, or when an API response is parsed). Components can assume their props are already valid; they should not contain `if (!property.title)` guards that mask upstream problems.
+</Accordion>
+
+<Tip>
+  When you are unsure where new code belongs, ask: "Does this code reference a domain concept like `Property`, `Agent`, or `Development`?" If yes, it lives inside that feature. If it is purely about infrastructure (formatting, theming, HTTP, SEO plumbing), it lives in `core/` or a global utility folder.
+</Tip>

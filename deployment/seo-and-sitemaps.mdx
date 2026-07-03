@@ -1,0 +1,242 @@
+---
+title: "SEO, sitemaps, and structured data configuration"
+sidebarTitle: "SEO & Sitemaps"
+description: "Real Estate Template auto-generates JSON-LD structured data, a dynamic sitemap.xml, and robots.txt. Set NUXT_PUBLIC_SITE_URL to enable all absolute-URL SEO features."
+---
+
+The Real Estate Template handles the full SEO stack automatically: every page emits its own `<title>`, description, Open Graph, and Twitter Card meta tags through the `usePageSeo()` composable, while JSON-LD structured data is injected as `<script type="application/ld+json">` blocks via `useJsonLd()`. A dynamic Nitro server route generates `/sitemap.xml` at runtime (or pre-renders it during `pnpm generate`) and a companion route serves `/robots.txt`. All absolute-URL features — canonical links, `og:url`, OG image URLs, sitemap entries, and the robots sitemap reference — are gated on a single environment variable: `NUXT_PUBLIC_SITE_URL`.
+
+---
+
+## The `NUXT_PUBLIC_SITE_URL` Variable
+
+Set this variable to your production domain before building. It is consumed by `nuxt.config.ts` and stored in `runtimeConfig.public.siteUrl`, making it available to both the client bundle and the Nitro server.
+
+```bash
+NUXT_PUBLIC_SITE_URL=https://www.your-agency.com
+```
+
+The value is normalized the same way in every consumer: any trailing slash is stripped so that concatenating it with a path that starts with `/` never produces `//`.
+
+<Warning>
+  When `NUXT_PUBLIC_SITE_URL` is empty (the default), the sitemap returns HTTP **503**, `robots.txt` emits `Disallow: /` blocking all crawlers, and canonical/`og:url` tags are omitted from every page. Never deploy to production without setting this variable.
+</Warning>
+
+### What it controls
+
+| Feature | Without `NUXT_PUBLIC_SITE_URL` | With `NUXT_PUBLIC_SITE_URL` |
+|---|---|---|
+| `<link rel="canonical">` | Not emitted | Absolute URL for the current route |
+| `og:url` | Not emitted | Absolute URL for the current route |
+| OG / Twitter image URL | Relative path (`/images/logo.svg`) | Absolute `https://` URL |
+| JSON-LD `@id`, `url` fields | Omitted | Absolute `https://` URL |
+| `/sitemap.xml` | HTTP 503 with plain-text hint | HTTP 200 listing all public routes |
+| `/robots.txt` | `Disallow: /` (blocks all crawlers) | `Allow: /` + `Sitemap:` reference |
+
+---
+
+## The `usePageSeo()` Composable
+
+`usePageSeo()` lives in `app/core/composables/usePageSeo.ts`. It is **not** auto-imported — every page that needs it must import it explicitly, which makes call sites easy to audit.
+
+```ts
+import { usePageSeo } from '~/core/composables/usePageSeo'
+```
+
+The composable returns computed values that each page passes to `useSeoMeta()` and `useHead()`. Each page is responsible for its own `useSeoMeta` call so that page-specific options (like `ogType: 'article'` on a property detail page) remain readable at the call site.
+
+```ts
+// Typical page usage
+const { canonicalUrl, ogImage, twitterImage, twitterCard, ogLocale, siteName } = usePageSeo()
+
+useSeoMeta({
+  title: t('seo.home.title'),
+  description: t('seo.home.description'),
+  ogTitle: t('seo.home.title'),
+  ogDescription: t('seo.home.description'),
+  ogImage: ogImage.value,
+  ogUrl: canonicalUrl.value ?? undefined,
+  ogLocale: ogLocale.value,
+  ogSiteName: siteName,
+  twitterCard: twitterCard,
+  twitterImage: twitterImage.value,
+})
+
+if (canonicalUrl.value) {
+  useHead({ link: [{ rel: 'canonical', href: canonicalUrl.value }] })
+}
+```
+
+<Note>
+  i18n keys (e.g. `t('seo.home.title')`) are resolved in the page and passed as plain strings to `useSeoMeta`. The `usePageSeo()` composable itself is i18n-agnostic — it only handles URL normalization, image resolution, and `og:site_name`.
+</Note>
+
+### Composable return values
+
+| Property | Type | Description |
+|---|---|---|
+| `siteUrl` | `Computed<string>` | Normalized `NUXT_PUBLIC_SITE_URL` (trailing slash stripped). Empty string when not configured. |
+| `toAbsoluteUrl(path)` | `(path: string) => string` | Converts a public path to an absolute URL. Returns the input unchanged when `siteUrl` is empty or when the path is already absolute. |
+| `canonicalUrl` | `Computed<string \| null>` | Absolute URL for the current route. `null` when `siteUrl` is empty. |
+| `ogImage` | `Computed<string>` | Absolute social image URL. Falls back to `defaultSeoConfig.ogImage` (`/images/logo.svg`) when no page-specific image or agency logo is available. |
+| `twitterImage` | `Computed<string>` | Same resolution logic as `ogImage`. |
+| `twitterCard` | `string` | Value of `defaultSeoConfig.twitterCard` (`summary_large_image`). |
+| `ogLocale` | `Computed<string>` | Active i18n locale code (`en` or `es`). |
+| `siteName` | `string` | `agency.name` from `useSiteConfig()`, used as `og:site_name`. |
+
+For pages with a per-record cover image (e.g. property detail), pass the image path via the `image` option:
+
+```ts
+const { ogImage } = usePageSeo({ image: computed(() => property.value?.coverImage) })
+```
+
+---
+
+## SEO Configuration File
+
+Structural SEO defaults live in `app/config/seo.ts`. This file holds the values that are the same across every page:
+
+```ts
+// app/config/seo.ts
+export const defaultSeoConfig: SeoConfig = {
+  titleTemplate: '%s',
+  ogImage: '/images/logo.svg',
+  twitterCard: 'summary_large_image',
+}
+```
+
+| Field | Value | Description |
+|---|---|---|
+| `titleTemplate` | `'%s'` | Page title passes through unchanged; add a suffix here if desired (e.g. `'%s — Agency Name'`) |
+| `ogImage` | `'/images/logo.svg'` | Fallback OG image when no page-specific image or agency logo is resolved |
+| `twitterCard` | `'summary_large_image'` | Twitter card type applied to every page |
+
+Per-page SEO copy (titles, descriptions) comes from i18n keys in the `seo.*` group in `i18n/locales/en.json` and `i18n/locales/es.json`. Both files must stay in sync — a key present in only one file causes the other locale to fall back to English silently.
+
+---
+
+## JSON-LD Structured Data
+
+Structured data is emitted via the `useJsonLd()` composable (`app/core/composables/useJsonLd.ts`), which wraps `useHead` to inject a `<script type="application/ld+json">` block. It accepts a plain object, a `ref`, or a getter so callers can compose the payload from reactive sources.
+
+```ts
+import { useJsonLd } from '~/core/composables/useJsonLd'
+
+useJsonLd(() => ({
+  '@context': 'https://schema.org',
+  '@type': 'RealEstateAgent',
+  '@id': toAbsoluteUrl('/'),
+  name: site.value.agency.name,
+  // …
+}))
+```
+
+No configuration is needed to enable or disable JSON-LD — it is wired directly into each page's setup function and produces the same output in SSG, SSR, and Nitro server modes. `NUXT_PUBLIC_SITE_URL` is required for absolute `@id` and `url` fields; when the variable is empty those fields are omitted.
+
+### JSON-LD schema per page
+
+| Route | Schema type | Notes |
+|---|---|---|
+| `/` | `RealEstateAgent` | `@id` is the agency home page absolute URL |
+| `/properties` | `ItemList` of `ListItem` | One `ListItem` per visible property card; `position` mirrors card order |
+| `/properties/[slug]` | `RealEstateListing` + `ItemList` | `RealEstateListing` includes `floorSize` as a `QuantitativeValue` with an explicit `unitCode`; the second `ItemList` covers related properties (always emitted, `itemListElement: []` when no related properties exist) |
+| `/agents` | `ItemList` of `Person` | Each agent's `worksFor` references the agency home page `@id` |
+| `/contact` | `ContactPage` | `mainEntity: RealEstateAgent` sharing the home page `@id` |
+| `/about` | `AboutPage` | `mainEntity: RealEstateAgent` sharing the home page `@id` |
+
+<Tip>
+  The home page, contact page, and about page all share the same `RealEstateAgent.@id` (the home page's absolute URL). This tells search engines the agency is a single knowledge-graph node regardless of which page they crawl first.
+</Tip>
+
+The related-properties `ItemList` on `/properties/[slug]` is **always registered** — it is not gated on `related.length`. When there are no related properties the `itemListElement` is an empty array, which is a valid and inert `ItemList`. The visible related-properties UI section is separately gated with `v-if="related.length"`, so the user never sees an empty section while the structured data is still present for parsers.
+
+---
+
+## Sitemap
+
+The sitemap is a Nitro server route at `server/routes/sitemap.xml.ts`. It is both served dynamically at runtime and pre-rendered to disk during `pnpm generate` (listed in `nuxt.config.ts → nitro.prerender.routes`).
+
+### Route inclusion logic
+
+The sitemap reads `siteConfig.agency.modules` and includes routes only for enabled modules:
+
+```
+/              always included
+/about         always included
+/contact       when modules.contact === true
+/agents        when modules.agents === true
+/properties    when modules.properties === true
+/properties/*  one URL per property from propertiesService.getAll()
+/developments  when modules.developments === true
+```
+
+<Note>
+  `propertiesService.getAll()` already filters out records with `status: 'hidden'`. Properties with any other status (`available`, `sold`, `reserved`, `rented`) are treated as public listings and appear in the sitemap. Per-development detail URLs (`/developments/[slug]`) are intentionally omitted — the detail route does not exist yet and emitting those URLs would point crawlers to 404s.
+</Note>
+
+The output is a minimal `urlset` (no `<lastmod>`, `<changefreq>`, or `<priority>` elements) because the data models do not carry a last-modified timestamp. All three fields are optional per the sitemaps.org spec.
+
+### Error behavior
+
+| Condition | HTTP status | Body |
+|---|---|---|
+| `NUXT_PUBLIC_SITE_URL` is set | 200 | Valid XML `urlset` |
+| `NUXT_PUBLIC_SITE_URL` is empty | 503 | `Configure NUXT_PUBLIC_SITE_URL to enable the sitemap.` |
+
+```ts
+// server/routes/sitemap.xml.ts (excerpt)
+const siteUrl = String(config.public.siteUrl || '').replace(/\/+$/, '')
+
+if (!siteUrl) {
+  setResponseStatus(event, 503)
+  setResponseHeader(event, 'Content-Type', 'text/plain; charset=utf-8')
+  return 'Configure NUXT_PUBLIC_SITE_URL to enable the sitemap.'
+}
+```
+
+---
+
+## Robots.txt
+
+The robots file is a Nitro server route at `server/routes/robots.txt.ts`. Unlike the sitemap, it always returns HTTP 200 — returning 503 for `robots.txt` can confuse crawlers that probe it early.
+
+```ts
+// server/routes/robots.txt.ts (excerpt)
+if (!siteUrl) {
+  return [
+    'User-Agent: *',
+    'Disallow: /',
+    '',
+    '# Configure NUXT_PUBLIC_SITE_URL to enable crawling.',
+    '',
+  ].join('\n')
+}
+
+return [
+  'User-Agent: *',
+  'Allow: /',
+  '',
+  `Sitemap: ${siteUrl}/sitemap.xml`,
+  '',
+].join('\n')
+```
+
+### Output by configuration state
+
+<CodeGroup>
+  ```txt Without NUXT_PUBLIC_SITE_URL
+  User-Agent: *
+  Disallow: /
+
+  # Configure NUXT_PUBLIC_SITE_URL to enable crawling.
+  ```
+
+  ```txt With NUXT_PUBLIC_SITE_URL
+  User-Agent: *
+  Allow: /
+
+  Sitemap: https://www.your-agency.com/sitemap.xml
+  ```
+</CodeGroup>
+
+Both `/sitemap.xml` and `/robots.txt` are included in `nitro.prerender.routes` with `failOnError: false`, so a `pnpm generate` run without `NUXT_PUBLIC_SITE_URL` still succeeds — it writes the degraded versions to disk rather than failing the build.

@@ -1,0 +1,380 @@
+---
+title: "Core layer: shared utilities and composables"
+sidebarTitle: "Core Layer"
+description: "The core/ directory holds business-agnostic infrastructure used across features: currency formatting, theme serialization, WhatsApp link generation, SEO, and JSON-LD."
+---
+
+The `core/` directory is the home for infrastructure that has no feature ownership. None of the code here knows what a `Property`, an `Agent`, or a `Development` is. It provides primitives — pure functions, Vue composables, and service wrappers — that any feature or page can import without creating a domain coupling. Think of it as the standard library of the project: stable, tested independently, and never changed for business reasons.
+
+```txt
+core/
+├── composables/
+│   ├── usePageSeo.ts     # Per-page SEO meta builder
+│   └── useJsonLd.ts      # JSON-LD structured data emitter
+│
+├── services/             # (future) API client, storage service
+├── types/                # Infrastructure TypeScript types
+│
+└── utils/
+    ├── currency-format.ts    # Intl-based currency formatter
+    ├── theme-to-css-vars.ts  # ThemeConfig → CSS variable string
+    └── whatsapp-link.ts      # wa.me deep link builder
+```
+
+## `core/utils/currency-format.ts`
+
+Real estate prices are displayed in different currencies and locales across agencies. `formatCurrency` wraps the `Intl.NumberFormat` API so every price in the app renders consistently, respects the active locale, and defaults to whole-unit display (no cents for property prices):
+
+```ts
+// core/utils/currency-format.ts
+
+export interface FormatCurrencyOptions {
+  /** ISO 4217 currency code, e.g. `USD`, `MXN`, `EUR`. */
+  currency: string
+  /** BCP 47 locale, e.g. `en-US`, `es-ES`. Defaults to `en-US`. */
+  locale?: string
+  /** Maximum fraction digits. Defaults to `0` (whole-unit prices). */
+  maximumFractionDigits?: number
+}
+
+export function formatCurrency(
+  amount: number,
+  { currency, locale = 'en-US', maximumFractionDigits = 0 }: FormatCurrencyOptions,
+): string {
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency,
+      maximumFractionDigits,
+    }).format(amount)
+  }
+  catch {
+    // Unknown currency code or locale: fall back to a plain number so the UI
+    // never crashes on misconfiguration.
+    return `${amount.toLocaleString(locale)} ${currency}`
+  }
+}
+```
+
+The caller supplies the `currency` code from the property record and the `locale` from the active i18n context — the utility itself is stateless. The `try/catch` ensures that an unknown ISO code (e.g. a typo in the agency config) produces a graceful fallback rather than crashing SSR.
+
+**Usage example:**
+
+```ts
+import { formatCurrency } from '~/core/utils/currency-format'
+
+// In a component or composable:
+const price = formatCurrency(685000, { currency: 'USD', locale: 'en-US' })
+// → '$685,000'
+
+const priceEs = formatCurrency(685000, { currency: 'MXN', locale: 'es-MX' })
+// → '$685,000'  (MXN symbol, Mexican locale grouping)
+```
+
+## `core/utils/theme-to-css-vars.ts`
+
+The visual identity of each agency is stored as a `ThemeConfig` TypeScript object. `themeToCssVars` serializes that object into a single CSS rule string that can be injected as a `<style>` block, setting all design tokens on `:root` during SSR — which means the correct branding renders on the first byte, with no flash of the default theme.
+
+```ts
+// core/utils/theme-to-css-vars.ts
+import type { ThemeConfig } from '~/types/theme.types'
+
+export function themeToCssVars(theme: ThemeConfig): string {
+  const c = theme.colors
+  const r = theme.radius
+  const s = theme.shadow
+  const f = theme.fonts
+  const l = theme.layout
+
+  const vars: Record<string, string> = {
+    '--color-background':          c.background,
+    '--color-foreground':          c.foreground,
+    '--color-surface':             c.surface,
+    '--color-surface-muted':       c.surfaceMuted,
+    '--color-primary':             c.primary,
+    '--color-primary-foreground':  c.primaryForeground,
+    '--color-secondary':           c.secondary,
+    '--color-secondary-foreground':c.secondaryForeground,
+    '--color-accent':              c.accent,
+    '--color-accent-foreground':   c.accentForeground,
+    '--color-muted':               c.muted,
+    '--color-border':              c.border,
+    '--color-card':                c.card,
+    '--color-card-foreground':     c.cardForeground,
+    '--color-success':             c.success,
+    '--color-warning':             c.warning,
+    '--color-error':               c.error,
+
+    '--radius-sm':   r.sm,
+    '--radius-md':   r.md,
+    '--radius-lg':   r.lg,
+    '--radius-xl':   r.xl,
+    '--radius-full': r.full,
+
+    '--shadow-sm': s.sm,
+    '--shadow-md': s.md,
+    '--shadow-lg': s.lg,
+
+    '--font-heading': f.heading,
+    '--font-body':    f.body,
+    '--font-serif':   f.serif,
+
+    '--container-max-width': l.containerMaxWidth,
+    '--section-spacing':     l.sectionSpacing,
+  }
+
+  const body = Object.entries(vars)
+    .map(([key, value]) => `${key}: ${value};`)
+    .join('')
+
+  return `:root{${body}}`
+}
+```
+
+The output is a compact `:root{…}` string injected by the `plugins/theme.ts` Nuxt plugin during SSR. Components then consume these values with `var(--color-primary)` — they never reference a raw hex code or a hardcoded Tailwind color class.
+
+<Note>
+  When a new theme token is needed (for example `--color-hero-overlay`), add it to `ThemeConfig`, update `themeToCssVars`, and reference it in your component via `var(--color-hero-overlay)`. No per-agency CSS file needs to be edited.
+</Note>
+
+## `core/utils/whatsapp-link.ts`
+
+Agency contact information is stored in human-friendly format: `+52 81 1234 5678`. `buildWhatsAppLink` normalizes any such phone string into a `https://wa.me/{digits}` deep link so every contact surface (footer, floating CTA, property detail page) produces a consistent URL regardless of how the number was entered in the config file.
+
+```ts
+// core/utils/whatsapp-link.ts
+
+/**
+ * Build a `wa.me` deep link from a WhatsApp phone number.
+ *
+ * Strips every non-digit character (spaces, dashes, parentheses, leading `+`,
+ * etc.) and prefixes the standard `https://wa.me/` so the result can be
+ * opened in a new tab to start a chat via WhatsApp Web or the mobile app.
+ *
+ * @param phone WhatsApp number in any common human format,
+ *              e.g. `+52 81 1234 5678`
+ * @returns A ready-to-use `https://wa.me/{digits}` URL, or `null` when no
+ *          valid number can be derived so callers can simply `v-if` the result.
+ */
+export function buildWhatsAppLink(phone: string | undefined | null): string | null {
+  if (!phone) return null
+  const digits = phone.replace(/\D/g, '')
+  return digits ? `https://wa.me/${digits}` : null
+}
+```
+
+The return type is `string | null` so templates can use `v-if` to hide the WhatsApp button when no number is configured:
+
+```vue
+<template>
+  <a
+    v-if="whatsappUrl"
+    :href="whatsappUrl"
+    target="_blank"
+    rel="noopener noreferrer"
+  >
+    {{ $t('contact.whatsapp') }}
+  </a>
+</template>
+
+<script setup lang="ts">
+import { buildWhatsAppLink } from '~/core/utils/whatsapp-link'
+import { useSiteConfig } from '~/composables/useSiteConfig'
+
+const site = useSiteConfig()
+const whatsappUrl = buildWhatsAppLink(site.value.agency.contact.whatsapp)
+// '+52 81 1234 5678' → 'https://wa.me/528112345678'
+</script>
+```
+
+## `core/composables/usePageSeo.ts`
+
+Every public page in Real Estate Template needs a canonical URL, Open Graph tags, a Twitter card, and a site name. `usePageSeo` centralizes the computation of these shared values — normalizing `runtimeConfig.public.siteUrl`, building absolute URLs, and reading the agency name — without calling `useSeoMeta` or `useHead` itself. Each page remains responsible for its own meta calls so page-specific options (a custom `ogType`, a property's cover image as the social image) stay readable at the call site.
+
+```ts
+// core/composables/usePageSeo.ts
+import { computed, type MaybeRef, toValue } from 'vue'
+import { useI18n, useRoute, useRuntimeConfig } from '#imports'
+import { useSiteConfig } from '~/composables/useSiteConfig'
+import { defaultSeoConfig } from '~/config/seo'
+
+export interface UsePageSeoOptions {
+  /**
+   * Optional social image path (string or ref). When omitted, the agency
+   * logo is used.
+   */
+  image?: MaybeRef<string | undefined>
+}
+
+export function usePageSeo(options: UsePageSeoOptions = {}): UsePageSeoResult {
+  const { locale } = useI18n()
+  const route = useRoute()
+  const config = useRuntimeConfig()
+  const site = useSiteConfig()
+
+  // Strip trailing slash so concatenation with route.path never produces `//`
+  const siteUrl = computed(() =>
+    (config.public.siteUrl ?? '').replace(/\/+$/, ''),
+  )
+
+  function toAbsoluteUrl(path: string): string {
+    if (!path) return path
+    if (/^https?:\/\//i.test(path)) return path
+    const base = siteUrl.value
+    if (!base) return path
+    return `${base}${path.startsWith('/') ? path : `/${path}`}`
+  }
+
+  const canonicalUrl = computed(() => {
+    const base = siteUrl.value
+    if (!base) return null
+    return `${base}${route.path}`
+  })
+
+  const imageSource = computed(() => toValue(options.image) ?? site.value.agency.logo)
+  const ogImage = computed(() => toAbsoluteUrl(imageSource.value || defaultSeoConfig.ogImage))
+  const twitterImage = computed(() => toAbsoluteUrl(imageSource.value || defaultSeoConfig.ogImage))
+
+  return {
+    siteUrl,
+    toAbsoluteUrl,
+    canonicalUrl,
+    ogImage,
+    twitterImage,
+    twitterCard: defaultSeoConfig.twitterCard,
+    ogLocale: computed(() => locale.value),
+    siteName: site.value.agency.name,
+  }
+}
+```
+
+**Typical page usage:**
+
+```vue
+<script setup lang="ts">
+import { usePageSeo } from '~/core/composables/usePageSeo'
+
+const { canonicalUrl, ogImage, twitterImage, twitterCard, ogLocale, siteName } = usePageSeo()
+
+useSeoMeta({
+  title: t('properties.meta.title'),
+  description: t('properties.meta.description'),
+  ogTitle: t('properties.meta.title'),
+  ogDescription: t('properties.meta.description'),
+  ogImage: ogImage.value,
+  ogLocale: ogLocale.value,
+  ogSiteName: siteName,
+  twitterCard,
+  twitterImage: twitterImage.value,
+})
+
+if (canonicalUrl.value) {
+  useHead({ link: [{ rel: 'canonical', href: canonicalUrl.value }] })
+}
+</script>
+```
+
+<Tip>
+  `usePageSeo` is deliberately **not** in the `imports.dirs` auto-import list. It is a page-level concern and is always imported explicitly so every SEO call site is auditable with a quick grep.
+</Tip>
+
+## `core/composables/useJsonLd.ts`
+
+Structured data (`application/ld+json`) is page-specific: the home page emits a `RealEstateAgent` payload, the listing page emits an `ItemList` of `RealEstateListing`, and the detail page emits a single `RealEstateListing`. `useJsonLd` exists to remove the boilerplate of writing `useHead({ script: [{ type: 'application/ld+json', innerHTML: () => JSON.stringify(…) }] })` on every page:
+
+```ts
+// core/composables/useJsonLd.ts
+import type { MaybeRefOrGetter } from 'vue'
+import { toValue } from 'vue'
+import { useHead } from '#imports'
+
+/**
+ * Emit a JSON-LD `<script type="application/ld+json">` block for the
+ * current page.
+ *
+ * The `innerHTML` callback is the function form so the JSON is serialized
+ * at SSR time, not at script-tag-stringification time.
+ *
+ * @param data The JSON-LD payload. Accepts a plain object, a ref, or a
+ *             getter so callers can compose the payload from reactive sources.
+ */
+export function useJsonLd(data: MaybeRefOrGetter<Record<string, unknown>>): void {
+  useHead({
+    script: [
+      {
+        type: 'application/ld+json',
+        innerHTML: () => JSON.stringify(toValue(data)),
+      },
+    ],
+  })
+}
+```
+
+A page composes a schema.org payload and passes it straight in:
+
+```ts
+// pages/index.vue
+import { useJsonLd } from '~/core/composables/useJsonLd'
+
+const site = useSiteConfig()
+
+useJsonLd({
+  '@context': 'https://schema.org',
+  '@type': 'RealEstateAgent',
+  name: site.value.agency.name,
+  url: siteUrl.value || undefined,
+  logo: toAbsoluteUrl(site.value.agency.logo),
+  telephone: site.value.agency.contact.phone,
+  address: {
+    '@type': 'PostalAddress',
+    addressLocality: site.value.agency.contact.city,
+    addressCountry: site.value.agency.contact.country,
+  },
+})
+```
+
+Because `data` accepts a `MaybeRefOrGetter`, a detail page can pass a `computed()` that derives the payload from the current property's reactive data — the JSON is re-serialized automatically on reactive changes.
+
+## `app/composables/useSiteConfig.ts`
+
+`useSiteConfig` is the primary read path for agency and theme data in every component, page, and utility. It wraps the active `SiteConfig` in Nuxt's `useState` so the value is shared between SSR and the client hydration without a second read of the config file:
+
+```ts
+// app/composables/useSiteConfig.ts
+import type { SiteConfig } from '~/types/site.types'
+import { siteConfig } from '~/config/site.config'
+
+/**
+ * Access the active site configuration (agency + theme).
+ *
+ * Backed by `useState` so the value is SSR-safe and can be replaced at
+ * runtime in later phases (env / JSON / API driven multi-tenant) without
+ * changing the components that consume it.
+ */
+export function useSiteConfig() {
+  return useState<SiteConfig>('site-config', () => siteConfig)
+}
+```
+
+The `useState` key `'site-config'` ensures the factory `() => siteConfig` runs exactly once on the server; subsequent calls on the server or any client call return the same reactive ref. When multi-tenancy is introduced, the factory can be replaced with an async config fetch — all consumers continue to work unchanged.
+
+**Typical usage:**
+
+```vue
+<script setup lang="ts">
+const site = useSiteConfig()
+
+// site.value.agency.name   → 'Prestige Realty'
+// site.value.agency.contact.whatsapp → '+52 81 1234 5678'
+// site.value.theme.colors.primary    → '#1f3a5f'
+</script>
+```
+
+<CardGroup cols={2}>
+  <Card title="Agency config" icon="building">
+    `site.value.agency` gives you the name, logo, slogan, contact info, social links, currency, and measurement unit for the active agency. Never hardcode any of these values in components.
+  </Card>
+  <Card title="Theme config" icon="palette">
+    `site.value.theme` gives you the full `ThemeConfig` object. During SSR, `plugins/theme.ts` passes this to `themeToCssVars()` and injects the result as a `<style>` block so CSS variables are available before any component renders.
+  </Card>
+</CardGroup>

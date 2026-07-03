@@ -1,0 +1,211 @@
+---
+title: "Troubleshooting common Real Estate Template issues"
+sidebarTitle: "Troubleshooting"
+description: "Solutions to common setup and deployment problems: missing logo, wrong currency, broken nav links, canonical URL issues, and Zod validation errors at startup."
+---
+
+Most issues with the Real Estate Template fall into one of three categories: a misconfigured agency config object, a missing or incorrect `NUXT_PUBLIC_SITE_URL` environment variable, or a mismatch between the data files and their Zod schemas. The items below cover the most common problems encountered during rebranding and deployment, along with the exact source of truth for each setting and how to fix it.
+
+---
+
+<AccordionGroup>
+
+  <Accordion title="My logo does not show">
+    **Symptom:** The header and/or footer renders without an image where the agency logo should be.
+
+    **Cause:** `agency.logo` in `app/config/agencies/default.agency.ts` either points to a file that does not exist under `public/`, or the path is not a public-root path.
+
+    **Fix:**
+    1. Confirm the file exists at the path you specified (e.g. `public/images/logo.svg`).
+    2. Confirm the value in the agency config is the public-root path, not the filesystem path — it should start with `/` (e.g. `/images/logo.svg`, not `public/images/logo.svg`).
+    3. Clear the build cache and rebuild:
+
+    ```bash
+    rm -rf .nuxt .output
+    pnpm build
+    ```
+
+    The favicon follows the same resolution logic — see the next item.
+  </Accordion>
+
+  <Accordion title="My favicon does not update">
+    **Symptom:** The browser tab still shows the old or default favicon after updating the agency config.
+
+    **Cause:** The favicon is resolved from `agency.favicon` at runtime by the `theme.ts` plugin. If `agency.favicon` is not set, the template falls back to `/favicon.ico`. Browsers cache the favicon extremely aggressively — often longer than the page itself.
+
+    **Fix:**
+    1. Confirm `agency.favicon` is set in the agency config and points to a real file under `public/` (e.g. `/favicon.ico` or `/images/favicon.png`).
+    2. Force a cache bypass: press **Ctrl+Shift+R** (Windows/Linux) or **Cmd+Shift+R** (macOS) for a hard refresh.
+    3. If the favicon still shows the old version, open a private/incognito window — that uses a fresh cache.
+    4. Some browsers (especially Chrome) cache favicons separately from pages. If the hard refresh does not work, clear the browser cache explicitly via **Settings → Privacy → Clear browsing data** and check **Cached images and files**.
+  </Accordion>
+
+  <Accordion title="A nav link is missing">
+    **Symptom:** One of the expected navigation entries (Properties, Agents, Developments, Contact) does not appear in the header or mobile menu.
+
+    **Cause:** The `mainNavigation` array filters entries by `agency.modules.*`. When a module flag is `false`, its nav entry, footer link, and home page section are all hidden.
+
+    **Fix:**
+    1. Open `app/config/agencies/default.agency.ts` and check the `modules` object:
+
+    ```ts
+    modules: {
+      properties:   true,
+      developments: true,
+      agents:       true,
+      blog:         false,   // ← blog nav is hidden
+      testimonials: true,
+      contact:      true,
+    }
+    ```
+
+    2. Set the relevant flag to `true`.
+    3. Note that disabling a module does **not** 404 its route — it only removes the navigation entry points. The route itself still resolves if visited directly.
+
+    <Note>
+      The `blog` module ships as `false` by default because the blog feature is not part of the MVP. Enabling it before the blog pages are implemented will add a nav link that leads to a missing page.
+    </Note>
+  </Accordion>
+
+  <Accordion title="WhatsApp link is wrong">
+    **Symptom:** Clicking the WhatsApp button opens a chat with the wrong number, or the number is malformed.
+
+    **Cause:** `agency.contact.whatsapp` in the agency config is the single source of truth for the WhatsApp number. The template normalizes human-formatted numbers (strips spaces, dashes, and parentheses) before building the `wa.me` URL, but it cannot add a missing country code.
+
+    **Fix:**
+    1. Open `app/config/agencies/default.agency.ts` and update `contact.whatsapp`.
+    2. Always include the full country code. For example, a US number: `+12125551234` or `12125551234`. For Mexico: `+525512345678`.
+    3. Spaces and dashes are stripped automatically, so `+1 (212) 555-1234` is also a valid input.
+    4. After saving, restart the dev server (`pnpm dev`) or rebuild for production to pick up the change.
+  </Accordion>
+
+  <Accordion title="Colors don't apply">
+    **Symptom:** Buttons, links, and accent elements still show the default template color instead of the agency's configured primary color.
+
+    **Cause:** There are three possible causes, in order of likelihood:
+
+    1. `agency.theme` does not match a registered theme id in `app/themes/index.ts`.
+    2. The `data-theme` attribute is not being set on the `<html>` element.
+    3. Components are using hardcoded Tailwind palette classes (e.g. `bg-teal-700`) instead of CSS custom property classes (e.g. `bg-primary`).
+
+    **Fix:**
+    1. Confirm `agency.theme` in the agency config exactly matches an id registered in `app/themes/index.ts`. A typo causes `resolveTheme()` to silently fall back to the default theme — no error is thrown.
+    2. Open browser DevTools, inspect the `<html>` element, and confirm it has a `data-theme` attribute. The `theme.ts` plugin sets this from the resolved theme id on app mount.
+    3. If you are customizing a component, ensure it uses `var(--color-primary)` or utility classes mapped to CSS variables, not raw Tailwind color classes.
+
+    To create a custom theme, add a new file (e.g. `app/themes/luxury.theme.ts`), register it in `app/themes/index.ts`, and set `agency.theme: 'luxury'` in the agency config.
+  </Accordion>
+
+  <Accordion title="Wrong currency symbol">
+    **Symptom:** Property prices show the wrong currency symbol, or no symbol at all.
+
+    **Cause:** The agency-level currency is set by `agency.currency` using an ISO 4217 code. However, each property record in `app/features/properties/data/properties.ts` also has its own `currency` field, and **the per-record value always wins** over the agency default.
+
+    **Fix:**
+    1. Confirm `agency.currency` in the agency config is a valid ISO 4217 code: `USD`, `MXN`, `EUR`, `GBP`, etc.
+    2. Check whether the individual property records have a `currency` field. If they do, the card will display that value regardless of the agency setting.
+    3. To enforce a single currency across all cards, set the same code on both `agency.currency` and every record's `currency` field (or remove the per-record field to let it inherit the agency default, depending on how the data model is implemented).
+  </Accordion>
+
+  <Accordion title="Property area shows wrong unit">
+    **Symptom:** The area displayed next to a property shows `m²` when it should be `ft²`, or vice versa. Or the number itself looks wrong (e.g. 150 when the correct value is 1,615).
+
+    **Cause:** The displayed unit is determined by the record's `sizeUnit` field first, falling back to `agency.measurementUnit` when `sizeUnit` is omitted. The template **does not perform automatic m² ↔ ft² conversion** — the stored number must already be in the declared unit.
+
+    **Fix:**
+    1. Open the relevant property in `app/features/properties/data/properties.ts`.
+    2. Check its `sizeUnit` field. If it is `'metric'` but the number is in square feet, both the field and the number must be updated together.
+    3. To switch a single record: change `sizeUnit` to `'imperial'` (or `'metric'`) **and** update the numeric value to match the new unit.
+    4. To switch the whole catalog: update every record's `sizeUnit` and corresponding numbers in a single pass, then also update `agency.measurementUnit` so new records default to the correct unit.
+
+    The same logic applies to development records in `app/features/developments/data/developments.ts`.
+  </Accordion>
+
+  <Accordion title="App won't boot (ZodError at startup)">
+    **Symptom:** The application crashes immediately on startup with a `ZodError`. The error typically appears in the terminal or browser console during module initialization.
+
+    **Cause:** The agency config (or a data file) failed Zod schema validation. Every data file under `app/features/*/data/` and the agency config itself are validated by Zod schemas at module load time. An invalid value throws before any page renders.
+
+    **Common causes and fixes:**
+
+    | Field | Invalid value | Fix |
+    |---|---|---|
+    | `agency.theme` | An id not registered in `app/themes/index.ts` | Use a registered theme id or register the new one first |
+    | `agency.defaultLocale` | A locale not in `availableLocales` | Ensure `defaultLocale` is also listed in `availableLocales` |
+    | `agency.logo` | A path that does not start with `/` | Use a root-relative path like `/images/logo.svg` |
+    | `agency.contact.phone` | Empty string when required | Fill in all required contact fields |
+    | `property.operationType` | A value not in the allowed enum | Use `sale` or `rent` only |
+    | `property.propertyType` | A value not in the allowed enum | Use `house`, `apartment`, `land`, `commercial`, or `office` |
+
+    Read the full Zod error message — it includes the exact path (e.g. `agency.contact.phone`) and the expected type. Fix the value at that path and restart the dev server.
+  </Accordion>
+
+  <Accordion title="Canonical URL or og:url is missing">
+    **Symptom:** Viewing page source shows no `<link rel="canonical">` tag and the `og:url` meta tag is absent.
+
+    **Cause:** `usePageSeo()` only emits `canonicalUrl` when `runtimeConfig.public.siteUrl` is non-empty. When `NUXT_PUBLIC_SITE_URL` is not set, `canonicalUrl` returns `null` and pages skip those tags entirely.
+
+    ```ts
+    // usePageSeo.ts — canonicalUrl is null when siteUrl is empty
+    const canonicalUrl = computed(() => {
+      const base = siteUrl.value
+      if (!base) return null
+      return `${base}${route.path}`
+    })
+    ```
+
+    **Fix:**
+    1. Set `NUXT_PUBLIC_SITE_URL=https://www.your-agency.com` in your deployment environment.
+    2. Rebuild (`pnpm build` or `pnpm generate`) — the value is read at build time and baked into the runtime config.
+    3. Redeploy and verify with **View Page Source** → search for `canonical`.
+
+    <Warning>
+      This is intentional behavior for local development — you do not want development builds pushing relative-URL canonical tags into search indexes. Always set the variable only in the production environment.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="Sitemap shows the wrong domain">
+    **Symptom:** `/sitemap.xml` lists URLs under a wrong domain, the old domain, or `localhost`.
+
+    **Cause:** The sitemap reads `NUXT_PUBLIC_SITE_URL` at build time (for `pnpm generate`) or at request time (for SSR). If the variable was set to a wrong or old value during the last build, the sitemap will contain those stale URLs.
+
+    **Fix:**
+    1. Update `NUXT_PUBLIC_SITE_URL` in your deployment environment to the correct domain.
+    2. For **static export** (`pnpm generate`): the sitemap is pre-rendered to disk. Rebuild after updating the variable:
+
+    ```bash
+    NUXT_PUBLIC_SITE_URL=https://www.correct-domain.com pnpm generate
+    ```
+
+    3. For **SSR** (`pnpm build`): the sitemap is generated at request time and reads from `runtimeConfig` directly, so it will use the updated value immediately after a server restart (no rebuild required).
+    4. Verify by visiting `https://www.your-domain.com/sitemap.xml` and confirming all `<loc>` entries use the correct domain.
+  </Accordion>
+
+  <Accordion title="Translated copy is missing or shows the key name">
+    **Symptom:** Part of the UI renders the raw i18n key (e.g. `nav.properties`) or falls back to English when the user's browser is set to Spanish (or vice versa).
+
+    **Cause:** The key is missing from one of the locale files. `@nuxtjs/i18n` falls back to the default locale (English) when a key is absent in the active locale, so a missing Spanish key silently shows English rather than throwing an error.
+
+    **Fix:**
+    1. Open both `i18n/locales/en.json` and `i18n/locales/es.json`.
+    2. Confirm the key exists in **both** files under the same path. The files must stay in sync.
+    3. For SEO titles and descriptions, check the `seo.*` key group specifically — this is the most common group to miss when adding a new page.
+    4. If the key is present in both files but still shows the English value in Spanish mode, confirm the i18n locale cookie (`i18n_locale`) is set correctly in your browser — clear it and reload to test the browser language detection.
+  </Accordion>
+
+  <Accordion title="Location search returns zero results">
+    **Symptom:** Typing a city name or location in the property search bar returns no results even though matching properties exist in the catalog.
+
+    **Cause:** The search is a case-insensitive, accent-insensitive substring match performed against a joined string of four fields per property: `location + city + state + country`. If the search term does not appear as a substring in any of those fields, the filter returns nothing.
+
+    The accent-insensitive matching means `Mexico` matches `México` and `Queretaro` matches `Querétaro`, but the match is still a substring search — partial matches at word boundaries work, but the substring must exist in one of the four fields.
+
+    **Fix:**
+    1. Open `app/features/properties/data/properties.ts` and find the property that should match.
+    2. Check the `location`, `city`, `state`, and `country` fields on that record.
+    3. Confirm the search term is a substring of one of those values. For example, a search for `"New York"` will match a property with `city: 'New York'` but not one with `city: 'NYC'`.
+    4. If a field is empty or has a typo, update the data file to use the expected value.
+    5. The search joins all four fields with spaces before matching, so a property with `city: 'San'` and `state: 'Francisco'` will **not** match a search for `"San Francisco"` — the match is against the individual field, not the joined string in that case. Ensure the full place name is in a single field.
+  </Accordion>
+
+</AccordionGroup>

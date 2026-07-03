@@ -1,0 +1,216 @@
+---
+title: "Add and manage translations with @nuxtjs/i18n"
+sidebarTitle: "Internationalization"
+description: "All visible UI text uses i18n keys from en.json and es.json. Add a new locale by registering it in nuxt.config.ts and creating a matching JSON file."
+---
+
+Every piece of static UI text in the template — navigation labels, button copy, form placeholders, empty-state messages, SEO titles, and structured headings — is stored as a translation key rather than a hardcoded string inside a component. The `@nuxtjs/i18n` module resolves the active locale at runtime and returns the matching string from a JSON file. The template ships with English (`en`) and Spanish (`es`) locale files. Adding a third language is a matter of registering it in `nuxt.config.ts` and creating a new JSON file in `i18n/locales/` — no component changes needed.
+
+## Setup and strategy
+
+The template uses the `'no_prefix'` routing strategy, which means routes are not prefixed with a locale code. `/properties` serves both English and Spanish content depending on the visitor's detected locale, rather than routing to `/en/properties` or `/es/properties`. Locale detection uses a cookie named `i18n_locale` so a visitor's preference persists across sessions.
+
+The default locale is `'en'`. The `agency.defaultLocale` field in the agency config is the source of truth for which locale the site opens with on first visit.
+
+## Locale file structure
+
+```
+i18n/
+└── locales/
+    ├── en.json    ← English (source of truth)
+    └── es.json    ← Spanish (must stay in sync with en.json)
+```
+
+Both files must define the same set of keys. If a key exists in `en.json` but not in `es.json`, the Spanish locale falls back to English silently — the visitor sees an untranslated string with no error. Always add a key to both files at the same time.
+
+## Translation key groups
+
+Keys are organized into top-level groups matching the domain they describe. The full key tree in the shipped `en.json` covers:
+
+| Group | Purpose |
+|---|---|
+| `nav.*` | Navigation link labels (home, properties, developments, agents, about, contact) |
+| `common.*` | Reusable labels shared across pages (contact, viewDetails, learnMore, loading, empty, openMenu, etc.) |
+| `home.*` | All homepage copy: hero, search bar, featured section, services, about band, locations, testimonials, CTA |
+| `properties.*` | Property catalog page, detail page, filters, sort options, status badges, type labels |
+| `developments.*` | Developments catalog page, status labels, card fields |
+| `agents.*` | Agents page, card actions (call, email, WhatsApp), empty state |
+| `contact.*` | Contact page and form fields |
+| `about.*` | About page: story, values, stats, CTA |
+| `footer.*` | Footer tagline, section headings, rights notice |
+
+### Partial example: `en.json`
+
+```json i18n/locales/en.json
+{
+  "nav": {
+    "home": "Home",
+    "properties": "Properties",
+    "developments": "Developments",
+    "agents": "Agents",
+    "about": "About Us",
+    "contact": "Contact"
+  },
+  "common": {
+    "contact": "Contact",
+    "viewDetails": "View details",
+    "learnMore": "Learn more",
+    "loading": "Loading...",
+    "empty": "No results found",
+    "selectLanguage": "Select language",
+    "skipToContent": "Skip to content"
+  },
+  "home": {
+    "hero": {
+      "eyebrow": "Real estate made simple",
+      "title": "Find your ideal property",
+      "subtitle": "Explore homes, apartments, land and developments available for sale or rent across the areas we serve.",
+      "ctaPrimary": "Browse properties",
+      "ctaSecondary": "Contact us"
+    },
+    "featured": {
+      "eyebrow": "Featured",
+      "title": "Featured properties",
+      "subtitle": "A handpicked selection of homes and spaces available right now.",
+      "viewAll": "View all properties"
+    },
+    "testimonials": {
+      "eyebrow": "Testimonials",
+      "title": "What our clients say",
+      "subtitle": "Real stories from people who found their place with us.",
+      "rating": "{rating} out of 5 stars"
+    }
+  },
+  "properties": {
+    "title": "Properties",
+    "types": {
+      "house": "House",
+      "apartment": "Apartment",
+      "land": "Land",
+      "commercial": "Commercial",
+      "office": "Office"
+    },
+    "operations": {
+      "sale": "For sale",
+      "rent": "For rent"
+    },
+    "status": {
+      "available": "Available",
+      "sold": "Sold",
+      "rented": "Rented",
+      "reserved": "Reserved",
+      "hidden": "Hidden"
+    }
+  },
+  "footer": {
+    "tagline": "Your trusted real estate partner.",
+    "quickLinks": "Quick links",
+    "contact": "Contact",
+    "rights": "All rights reserved."
+  }
+}
+```
+
+## Using translations in Vue templates
+
+Access translations with the `$t()` helper in templates, or `useI18n().t()` in `<script setup>`:
+
+```vue
+<!-- In template -->
+<template>
+  <h1>{{ $t('home.hero.title') }}</h1>
+  <BaseButton>{{ $t('common.contact') }}</BaseButton>
+  <span>{{ $t('home.testimonials.rating', { rating: testimonial.rating }) }}</span>
+</template>
+
+<!-- In script setup (Composition API) -->
+<script setup lang="ts">
+const { t } = useI18n()
+const pageTitle = computed(() => t('properties.seo.title', { agencyName: site.value.agency.name }))
+</script>
+```
+
+Some keys use named interpolation placeholders (`{agencyName}`, `{rating}`, `{count}`) — pass the values as the second argument to `$t()`. The SEO title keys, for instance, embed the agency name: `"Properties for sale and rent | {agencyName}"`.
+
+## Adding a new locale
+
+<Steps>
+  <Step title="Register the locale in nuxt.config.ts">
+    Add the new locale code to the `defaultI18nLocales` list (or the equivalent `locales` array in the i18n module config):
+
+    ```typescript nuxt.config.ts
+    i18n: {
+      defaultLocale: 'en',
+      locales: [
+        { code: 'en', file: 'en.json' },
+        { code: 'es', file: 'es.json' },
+        { code: 'pt', file: 'pt.json' },  // ← new
+      ],
+    }
+    ```
+  </Step>
+  <Step title="Create the JSON translation file">
+    Copy `i18n/locales/en.json` to `i18n/locales/pt.json` and translate every value:
+
+    ```json i18n/locales/pt.json
+    {
+      "nav": {
+        "home": "Início",
+        "properties": "Imóveis",
+        "developments": "Empreendimentos",
+        "agents": "Agentes",
+        "about": "Sobre nós",
+        "contact": "Contato"
+      },
+      "common": {
+        "contact": "Contato",
+        "viewDetails": "Ver detalhes",
+        "learnMore": "Saiba mais"
+      }
+    }
+    ```
+  </Step>
+  <Step title="Update the agency config">
+    Add `'pt'` to `availableLocales` in the agency config so the `AppLanguageSwitcher` component includes it and so `validateAgencyConfig()` does not throw a missing-locale error:
+
+    ```typescript app/config/agencies/default.agency.ts
+    availableLocales: ['en', 'es', 'pt'],
+    ```
+  </Step>
+  <Step title="Restart the dev server">
+    Run `pnpm dev`. The language switcher will now show the new locale option.
+  </Step>
+</Steps>
+
+<Warning>
+  If you add a locale to `nuxt.config.ts` but forget to add it to `agency.availableLocales` (or vice versa), `validateAgencyConfig()` will throw a `ZodError` at module load listing the missing locale. This cross-config check is intentional — it prevents a language from appearing in the switcher without a translation file, or from being enabled in the agency config without being wired into i18n.
+</Warning>
+
+## Agency content vs. i18n keys
+
+The template draws a clear line between two kinds of text:
+
+<CardGroup cols={2}>
+  <Card title="i18n keys (en.json / es.json)" icon="language">
+    Static UI strings that are the same for every agency using the template: button labels, navigation entries, form field labels, empty-state messages, filter headings, and SEO title patterns. **All of these use translation keys.**
+  </Card>
+  <Card title="Agency content (data files)" icon="building">
+    Dynamic content specific to this agency: property titles, agent names and bios, development descriptions, testimonial quotes, city names, and statistics. **These are plain strings in the data files** — not i18n keys.
+  </Card>
+</CardGroup>
+
+**Concrete examples:**
+
+| String | Where it lives | Why |
+|---|---|---|
+| `"Browse properties"` (hero CTA label) | `home.hero.ctaPrimary` in `en.json` | Same label for any agency; translatable |
+| `"Modern Hillside Villa"` (property title) | `properties.ts` data file | Agency-specific content |
+| `"For sale"` (operation type badge) | `properties.operations.sale` in `en.json` | Fixed UI vocabulary; translatable |
+| `"María González"` (agent name) | `agents.ts` data file | Agency-specific content |
+| `"Mon–Fri 9am–5pm"` (business hours) | `agency.contact.businessHours` in agency config | Agency-specific identity |
+
+Agency-specific identity fields — the agency name, address, phone number, and business hours — come from `useSiteConfig().agency` rather than from the locale files. This means they appear in the same language regardless of the active locale (which is correct: a phone number or street address does not change with language).
+
+## The `AppLanguageSwitcher` component
+
+The `AppLanguageSwitcher` component reads `agency.availableLocales`, renders a selector for each locale, and calls `@nuxtjs/i18n`'s `setLocale()` when the user picks a language. The selection is persisted in the `i18n_locale` cookie. No configuration beyond adding the locale to the agency config and registering it in `nuxt.config.ts` is required to make the switcher work.

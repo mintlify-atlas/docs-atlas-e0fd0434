@@ -1,0 +1,215 @@
+---
+title: "Build and deploy the Real Estate Template"
+sidebarTitle: "Build & Deploy"
+description: "Run pnpm build for SSR deployment or pnpm generate for a static export. Set NUXT_PUBLIC_SITE_URL before building to enable canonical URLs and sitemaps."
+---
+
+The Real Estate Template ships as a standard Nuxt 4 application powered by the Nitro server engine, giving you two deployment strategies right out of the box: a full **SSR/Node.js server** build that runs on any Node-capable host, and a **static export** that pre-renders every page to plain HTML files you can drop on any CDN. Before you pick a mode, you must set `NUXT_PUBLIC_SITE_URL` — without it the sitemap returns HTTP 503, `robots.txt` blocks all crawlers, and every canonical and `og:url` meta tag is silently omitted from the rendered HTML.
+
+## Environment Variables
+
+The only required variable for a production build is `NUXT_PUBLIC_SITE_URL`. It is read by `nuxt.config.ts` at build time and exposed to both the Vite bundle and the Nitro server via `runtimeConfig.public.siteUrl`.
+
+```bash
+NUXT_PUBLIC_SITE_URL=https://www.your-agency.com
+```
+
+<Warning>
+  Set this variable **before** running `pnpm build` or `pnpm generate`. The value is baked into the production bundle at build time. If you change it after building, you must rebuild.
+</Warning>
+
+| Variable | Required | Default | Effect when missing |
+|---|---|---|---|
+| `NUXT_PUBLIC_SITE_URL` | Production only | `""` (empty) | Canonical URLs and `og:url` are omitted; sitemap returns 503; `robots.txt` blocks all crawlers |
+
+### What it unlocks
+
+When `NUXT_PUBLIC_SITE_URL` is set to your production domain the template immediately enables all of the following:
+
+- **Canonical `<link rel="canonical">` tags** on every page (via `usePageSeo()`)
+- **Absolute `og:url`** meta values for correct Open Graph previews
+- **Absolute OG image URLs** — the agency logo and property cover images become fully-qualified `https://` URLs
+- **`/sitemap.xml`** returns HTTP 200 and lists all public routes
+- **`/robots.txt`** switches from `Disallow: /` to `Allow: /` and advertises the sitemap URL
+
+When the variable is empty (the default for local development) the composable returns `null` for `canonicalUrl` and every page skips emitting canonical and `og:url` tags. This is intentional — development builds should never push relative-URL canonical tags into search engine indexes.
+
+---
+
+## Deployment Modes
+
+<CardGroup cols={2}>
+  <Card title="SSR / Node.js Server" icon="server">
+    Run `pnpm build`. Nitro compiles the app to `.output/`. Start it with `node .output/server/index.mjs`. Best for dynamic data, ISR, and server middleware.
+  </Card>
+  <Card title="Static Export" icon="globe">
+    Run `pnpm generate`. Nitro pre-renders all pages to `.output/public/`. Deploy the folder directly to Vercel, Netlify, Cloudflare Pages, or any CDN.
+  </Card>
+</CardGroup>
+
+### SSR — `pnpm build`
+
+`pnpm build` produces a self-contained Nitro server in `.output/`:
+
+```
+.output/
+  server/
+    index.mjs       ← entrypoint
+    chunks/         ← server bundle chunks
+  public/           ← static assets (images, fonts, _nuxt/)
+```
+
+Start the server:
+
+```bash
+node .output/server/index.mjs
+```
+
+The server listens on port `3000` by default. Set the `PORT` environment variable to change it. This mode supports real-time SSR, server routes (including the dynamic `/sitemap.xml` and `/robots.txt`), and API routes if you add them later.
+
+### Static export — `pnpm generate`
+
+`pnpm generate` crawls every linked page and pre-renders them all to static HTML in `.output/public/`. The `/sitemap.xml` and `/robots.txt` Nitro server routes are listed in `nuxt.config.ts` under `nitro.prerender.routes` so they are always written to disk even though no page links to them:
+
+```ts
+// nuxt.config.ts
+nitro: {
+  prerender: {
+    failOnError: false,
+    routes: ['/sitemap.xml', '/robots.txt'],
+  },
+},
+```
+
+<Note>
+  `failOnError: false` lets the build pass even when `NUXT_PUBLIC_SITE_URL` is not set. In that case the sitemap and robots routes return degraded responses (503 and `Disallow: /` respectively), which are valid but inert. Production builds should always have the env var set.
+</Note>
+
+Deploy `.output/public/` to any static host:
+
+```bash
+# Vercel (auto-detected as Nuxt)
+vercel deploy
+
+# Netlify drag-and-drop
+netlify deploy --dir .output/public
+
+# Cloudflare Pages
+wrangler pages deploy .output/public
+```
+
+---
+
+## Build Steps
+
+<Steps>
+  <Step title="Set the site URL environment variable">
+    Export `NUXT_PUBLIC_SITE_URL` in your shell or CI environment before running any other command. This is the only variable the template requires for a fully functional production build.
+
+    ```bash
+    export NUXT_PUBLIC_SITE_URL=https://www.your-agency.com
+    ```
+
+    On Vercel, Netlify, or Cloudflare Pages, add it in the project's **Environment Variables** settings panel instead.
+  </Step>
+
+  <Step title="Install dependencies">
+    The project uses `pnpm` as its package manager. The `postinstall` script runs `nuxt prepare` automatically to generate TypeScript types.
+
+    ```bash
+    pnpm install
+    ```
+  </Step>
+
+  <Step title="Run the linter">
+    The template ships with `@nuxt/eslint` for zero-config linting. Run it before building to catch any issues introduced during rebranding.
+
+    ```bash
+    pnpm lint
+    ```
+
+    Fix any auto-fixable issues with:
+
+    ```bash
+    pnpm lint:fix
+    ```
+  </Step>
+
+  <Step title="Build for your target deployment mode">
+    Choose **one** of the following depending on your hosting environment:
+
+    <CodeGroup>
+      ```bash SSR / Node.js Server
+      pnpm build
+      # Output: .output/server/index.mjs
+      ```
+
+      ```bash Static Export
+      pnpm generate
+      # Output: .output/public/
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Verify the build output">
+    For SSR, start the server and open it in a browser:
+
+    ```bash
+    node .output/server/index.mjs
+    # or: pnpm preview
+    ```
+
+    For static, preview the output locally:
+
+    ```bash
+    pnpm preview
+    ```
+
+    Then work through the post-build checklist below.
+  </Step>
+</Steps>
+
+---
+
+## Available Scripts
+
+| Script | Command | Description |
+|---|---|---|
+| `dev` | `pnpm dev` | Start Nuxt devserver with HMR and Devtools enabled |
+| `build` | `pnpm build` | Compile SSR/Nitro server to `.output/` |
+| `generate` | `pnpm generate` | Pre-render all pages to static HTML in `.output/public/` |
+| `preview` | `pnpm preview` | Serve the last build locally for final review |
+| `lint` | `pnpm lint` | Run ESLint across the entire project |
+| `lint:fix` | `pnpm lint:fix` | Run ESLint and auto-fix all fixable issues |
+
+---
+
+## Post-Build Verification Checklist
+
+After every production build, open the deployed site and verify these items before going live. They cover the most common rebranding mistakes that are invisible during `pnpm dev` but break in production.
+
+<AccordionGroup>
+  <Accordion title="Logo renders in header and footer">
+    Open the home page (`/`). The agency logo should appear in both the site header and the footer. If it is missing, `agency.logo` in the agency config does not point to an existing file under `public/`. The value must be a public path such as `/images/logo.svg`. Clear `.nuxt` and `.output`, then rebuild.
+  </Accordion>
+
+  <Accordion title="Agency name in the footer">
+    The footer reads `agency.name` from `useSiteConfig()`. Confirm it shows the new agency name, not the placeholder "Default Agency" that ships with the template.
+  </Accordion>
+
+  <Accordion title="Currency symbol is correct">
+    Open any property card. The price should be formatted in the currency set by `agency.currency` (ISO 4217 code such as `USD`, `MXN`, or `EUR`). Individual property records can override this with a per-record `currency` field — the card always uses the per-record value first.
+  </Accordion>
+
+  <Accordion title="Primary color matches the theme">
+    Interactive elements (buttons, links, active states) should use the primary color defined in the active theme. If they still show the template's default teal, confirm `agency.theme` matches a registered id in `app/themes/index.ts` and that the `data-theme` attribute is present on the `<html>` element.
+  </Accordion>
+
+  <Accordion title="WhatsApp link opens with the correct number">
+    Tap the WhatsApp contact button. The pre-filled number should match `agency.contact.whatsapp`. The template strips spaces and dashes automatically, but the country code must be included (e.g. `+12125551234`).
+  </Accordion>
+
+  <Accordion title="Open Graph image tag is present">
+    Right-click any page → **View Page Source** and search for `og:image`. The value should be an absolute `https://` URL pointing to the agency logo or a property cover image. If it is a relative path (e.g. `/images/logo.svg`), `NUXT_PUBLIC_SITE_URL` was not set at build time.
+  </Accordion>
+</AccordionGroup>

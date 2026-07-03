@@ -1,20 +1,97 @@
 ---
-title: "Introduction"
-description: "Welcome to your project"
+title: "Real Estate Template: White-Label Nuxt 4 Website Starter"
+sidebarTitle: "Introduction"
+description: "A modular, multi-agency real estate website template built with Nuxt 4, Vue 3, TypeScript, and Tailwind CSS v4. Rebrand and deploy without touching a single component."
 ---
 
-Write a short description of your product here. What it does, who it's for, and what they can accomplish with it.
+Real Estate Template is a production-ready Nuxt 4 starter for building white-label real estate websites. It ships with a property catalog, agent directory, development portfolio, internationalization, and a CSS-variable-based theme system — all driven by a single agency configuration file. Change your agency's name, logo, colors, and contact details in one place and every component updates automatically.
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Install dependencies and run your first local preview in under five minutes.
+  </Card>
+  <Card title="Agency Config" icon="building" href="/customization/agency-config">
+    Swap the agency identity, currency, and enabled modules without touching components.
+  </Card>
+  <Card title="Theming" icon="palette" href="/customization/theming">
+    Create custom themes using design tokens that compile to CSS variables at runtime.
+  </Card>
+  <Card title="Data & Content" icon="database" href="/customization/data-and-content">
+    Replace the sample properties, agents, and developments with real agency data.
+  </Card>
+  <Card title="Architecture" icon="sitemap" href="/architecture/overview">
+    Understand the feature-first folder layout and module ownership model.
+  </Card>
+  <Card title="Component Reference" icon="puzzle-piece" href="/reference/components/ui-components">
+    Explore the Base* UI primitives, App* layout shells, and feature components.
+  </Card>
+</CardGroup>
+
+## What's included
+
+The template covers the full public surface of a real estate website out of the box:
+
+<CardGroup cols={3}>
+  <Card title="Property Catalog" icon="house">
+    Filterable listing page with accent-insensitive search and stable sort orders.
+  </Card>
+  <Card title="Property Detail" icon="magnifying-glass">
+    Slug-based detail pages with gallery, amenities, and related listings.
+  </Card>
+  <Card title="Developments" icon="building-columns">
+    Portfolio of residential developments with status badges and price ranges.
+  </Card>
+  <Card title="Agent Directory" icon="users">
+    Team page with WhatsApp, email, and specialty tags per agent.
+  </Card>
+  <Card title="i18n Built-in" icon="language">
+    English and Spanish out of the box via @nuxtjs/i18n — add more locales anytime.
+  </Card>
+  <Card title="SEO & Structured Data" icon="chart-line">
+    Automatic JSON-LD, sitemap.xml, robots.txt, and Open Graph tags per page.
+  </Card>
+</CardGroup>
+
+## Tech stack
+
+The template is built on a modern, well-supported stack with no experimental dependencies:
+
+| Layer | Technology |
+|---|---|
+| Framework | Nuxt 4 (`app/` directory convention) |
+| UI | Vue 3 + TypeScript |
+| Styling | Tailwind CSS v4 via `@tailwindcss/vite` |
+| State | Pinia |
+| Validation | Zod v4 |
+| i18n | @nuxtjs/i18n (English + Spanish) |
+| Images | @nuxt/image + Nuxt Icon |
+| Utilities | VueUse, Swiper |
+
+## Getting started
+
+<Steps>
+  <Step title="Clone and install">
+    Clone the repository and install dependencies with pnpm.
+    ```bash
+    git clone https://github.com/Ozcaar/real-estate-template.git
+    cd real-estate-template
+    pnpm install
+    ```
+  </Step>
+  <Step title="Start the dev server">
+    ```bash
+    pnpm dev
+    ```
+    Open [http://localhost:3000](http://localhost:3000) to see the template running with sample data.
+  </Step>
+  <Step title="Configure your agency">
+    Edit `app/config/agencies/default.agency.ts` to set your agency name, logo, contact details, and which modules are enabled. See the [Agency Config guide](/customization/agency-config) for the full field reference.
+  </Step>
+  <Step title="Replace sample data and build">
+    Swap the placeholder properties, agents, and developments with your real data files, then run `pnpm build` for production.
+  </Step>
+</Steps>
 
 <Tip>
-  Ready to make this your own? Start by editing this page. Update your `docs.json` file to customize your site. Then fill out the [Quickstart](/quickstart) page.
+  The `postinstall` script runs `nuxt prepare` automatically, so TypeScript types and auto-imports are ready immediately after `pnpm install`.
 </Tip>
-
-<Card title="Quickstart" icon="rocket" href="/quickstart">
-  This card links to the quickstart page in your project.
-</Card>
-<Card title="Components" icon="puzzle-piece" href="https://mintlify.com/docs/components">
-  Add cards, callouts, steps, tabs, and more to design and structure your pages.
-</Card>
-<Card title="Settings" icon="gear" href="https://mintlify.com/docs/organize/settings">
-  Set your site name, branding, and navigation in the `docs.json` file.
-</Card>

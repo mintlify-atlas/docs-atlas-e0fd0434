@@ -1,0 +1,259 @@
+---
+title: "AgencyConfig interface and field reference"
+sidebarTitle: "AgencyConfig"
+description: "AgencyConfig is the central configuration object controlling agency identity, contact details, social links, enabled modules, currency, and theme selection."
+---
+
+`AgencyConfig` is the single source of truth for everything that varies between real estate agencies: identity, contact details, social presence, feature modules, locale settings, currency, measurement units, and the active theme. It is defined in `app/types/agency.types.ts` and consumed exclusively through the `useSiteConfig()` composable — components must never hardcode agency data. The file `app/config/agencies/default.agency.ts` ships a complete placeholder configuration that demonstrates every field; copy and rename it to create a new agency identity.
+
+---
+
+## `MeasurementUnit` type
+
+```ts
+export type MeasurementUnit = 'metric' | 'imperial'
+```
+
+Controls the default unit label displayed for property and development area measurements (`m²` vs `ft²`). This is the agency-level default; individual `Property` and `Development` records may override it with their own `sizeUnit` field.
+
+---
+
+## `AgencyConfig` interface
+
+<ParamField body="id" type="string" required>
+  Unique agency identifier (e.g. `'default'`, `'acme-realty'`). Used internally as a stable key; does not appear in the UI.
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  Agency display name rendered in the header, footer, and browser title. Zod enforces at least one non-whitespace character.
+</ParamField>
+
+<ParamField body="slogan" type="string">
+  Optional short marketing tagline shown in hero sections and the footer (e.g. `'Find your ideal property'`).
+</ParamField>
+
+<ParamField body="logo" type="string" required>
+  Path to the agency logo served from `public/` (e.g. `'/images/logo.svg'`). Must begin with `'/'`. Zod enforces the leading slash.
+</ParamField>
+
+<ParamField body="favicon" type="string">
+  Optional path to the favicon served from `public/` (e.g. `'/favicon.ico'`). Must begin with `'/'` when present.
+</ParamField>
+
+<ParamField body="theme" type="string" required>
+  ID of the theme this agency uses (e.g. `'default'`). Must match a key in the themes registry (`app/themes/index.ts`). The cross-config validator throws a `ZodError` when this ID is not found in the registry.
+</ParamField>
+
+<ParamField body="defaultLocale" type="string" required>
+  BCP 47 locale code that the site falls back to (e.g. `'en'`, `'es'`). Must appear in both `availableLocales` and `i18nLocales` — the cross-config validator throws if either condition is not met.
+</ParamField>
+
+<ParamField body="availableLocales" type="string[]" required>
+  Array of BCP 47 locale codes the agency supports (e.g. `['en', 'es']`). Must be non-empty. Every entry must also be registered in the Nuxt i18n config (`i18nLocales`).
+</ParamField>
+
+<ParamField body="currency" type="string" required>
+  ISO 4217 currency code used to format all prices (e.g. `'USD'`, `'MXN'`, `'EUR'`). Applied by the `currency-format.ts` utility across property cards, detail pages, and development showcases. A format warning (non-throwing) is emitted when the value does not match the three-uppercase-letter ISO 4217 pattern.
+</ParamField>
+
+<ParamField body="measurementUnit" type="MeasurementUnit" required>
+  Agency-wide default area unit. `'metric'` renders `m²`; `'imperial'` renders `ft²`. Individual `Property` and `Development` records override this with their own `sizeUnit` field. No auto-conversion is performed — numbers are always rendered as-is.
+</ParamField>
+
+<ParamField body="contact" type="AgencyContactConfig" required>
+  Primary contact details. See [`AgencyContactConfig`](#agencycontactconfig) below.
+</ParamField>
+
+<ParamField body="social" type="AgencySocialConfig" required>
+  Social media profile URLs. See [`AgencySocialConfig`](#agencysocialconfig) below.
+</ParamField>
+
+<ParamField body="modules" type="AgencyModulesConfig" required>
+  Feature-flag toggles. See [`AgencyModulesConfig`](#agencymodulesconfig) below.
+</ParamField>
+
+---
+
+## Nested interfaces
+
+### `AgencyContactConfig`
+
+<ResponseField name="contact" type="AgencyContactConfig">
+  <Expandable title="fields">
+    <ResponseField name="phone" type="string" required>
+      Main agency phone number in any human-readable format. Rendered as a `tel:` link in the footer, header, and contact page.
+    </ResponseField>
+    <ResponseField name="whatsapp" type="string" required>
+      WhatsApp contact number. May be human-formatted (spaces, dashes, country code prefix). `buildWhatsAppLink` in `app/core/utils/whatsapp-link.ts` normalizes it to a `https://wa.me/` URL at render time. Always include the country code.
+    </ResponseField>
+    <ResponseField name="email" type="string" required>
+      Primary contact email address. Rendered as a `mailto:` link. A format warning (non-throwing) is emitted when the value does not match the `name@domain.tld` pattern.
+    </ResponseField>
+    <ResponseField name="address" type="string" required>
+      Physical office address. Displayed in the footer and contact page.
+    </ResponseField>
+    <ResponseField name="businessHours" type="string">
+      Optional free-text business hours string (e.g. `'Mon–Fri 9am–6pm'`). Displayed on the contact page when present.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### `AgencySocialConfig`
+
+<ResponseField name="social" type="AgencySocialConfig">
+  <Expandable title="fields">
+    <ResponseField name="facebook" type="string">
+      Full Facebook profile URL. Optional. A format warning is emitted when the value does not start with `http://`, `https://`, or `www.`.
+    </ResponseField>
+    <ResponseField name="instagram" type="string">
+      Full Instagram profile URL. Optional. Format warning rules apply.
+    </ResponseField>
+    <ResponseField name="linkedin" type="string">
+      Full LinkedIn company or personal profile URL. Optional. Format warning rules apply.
+    </ResponseField>
+    <ResponseField name="tiktok" type="string">
+      Full TikTok profile URL. Optional. Format warning rules apply.
+    </ResponseField>
+    <ResponseField name="youtube" type="string">
+      Full YouTube channel URL. Optional. Format warning rules apply.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### `AgencyModulesConfig`
+
+All six fields are required booleans. Setting a module to `false` removes its navigation entry (via the `module` field on `NavItem`) and disables its routes and components, allowing agencies that do not use a feature to ship without dead pages.
+
+<ResponseField name="modules" type="AgencyModulesConfig">
+  <Expandable title="fields">
+    <ResponseField name="properties" type="boolean" required>
+      Enables the properties listing page, detail pages, and all property-related components.
+    </ResponseField>
+    <ResponseField name="developments" type="boolean" required>
+      Enables the developments showcase section and its related components.
+    </ResponseField>
+    <ResponseField name="agents" type="boolean" required>
+      Enables the agents team section and its related components.
+    </ResponseField>
+    <ResponseField name="blog" type="boolean" required>
+      Enables blog functionality. Currently set to `false` in the default agency — the blog module is planned but not yet implemented.
+    </ResponseField>
+    <ResponseField name="testimonials" type="boolean" required>
+      Enables the testimonials section on the homepage.
+    </ResponseField>
+    <ResponseField name="contact" type="boolean" required>
+      Enables the contact page and contact form components.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Runtime validation
+
+The file `app/config/agencies/agency.schema.ts` provides runtime validation for `AgencyConfig`. Two public functions are exported.
+
+### `validateAgencyConfig(agency, deps)`
+
+Strict variant. Throws a `ZodError` on any structural or cross-config failure. Returns `{ agency, warnings }` on success.
+
+```ts
+import { validateAgencyConfig } from '~/config/agencies/agency.schema'
+import { themes } from '~/themes'
+import { defaultI18nLocales } from '~/config/i18n'
+
+const { agency, warnings } = validateAgencyConfig(myAgencyConfig, {
+  themes,
+  i18nLocales: defaultI18nLocales,
+})
+
+if (warnings.length > 0) {
+  warnings.forEach(w => console.warn('[AgencyConfig]', w))
+}
+```
+
+### `safeParseAgencyConfig(agency, deps)`
+
+Non-throwing variant. Returns a tagged discriminated union so callers can handle validation errors without a try/catch:
+
+```ts
+export type SafeParseAgencyConfigResult =
+  | { ok: true;  agency: AgencyConfig; warnings: string[] }
+  | { ok: false; error: z.ZodError;    warnings: string[] }
+```
+
+Use this variant in multi-tenant loaders or server-side config resolution where you want to fall back to the default agency instead of crashing.
+
+```ts
+const result = safeParseAgencyConfig(unknownConfig, { themes, i18nLocales })
+if (!result.ok) {
+  console.error('Invalid agency config:', result.error.issues)
+  // fall back to default agency...
+}
+```
+
+---
+
+## Cross-config coherence checks
+
+These rules throw a `ZodError` when violated:
+
+| Rule | Description |
+|------|-------------|
+| `defaultLocale ∈ availableLocales` | The default locale must be listed in the agency's supported locales |
+| `defaultLocale ∈ i18nLocales` | The default locale must be registered in Nuxt's i18n config |
+| Every `availableLocales[i] ∈ i18nLocales` | Every supported locale must be registered in Nuxt's i18n config |
+| `theme ∈ themes` | The theme ID must exist as a key in the themes registry |
+
+---
+
+## Format warnings
+
+These checks log a `console.warn` but **never throw**. A site with format warnings still boots correctly. The shipped `default.agency.ts` triggers five warnings by design (one per social platform placeholder URL) to document what a real agency should update during rebranding.
+
+| Check | Condition |
+|-------|-----------|
+| `contact.email` | Does not match `name@domain.tld` pattern |
+| `currency` | Does not match the three-uppercase-letter ISO 4217 pattern |
+| `social.*` | Any set social URL that does not start with `http://`, `https://`, or `www.` |
+
+---
+
+## Related interfaces
+
+### `SiteConfig`
+
+The resolved configuration object consumed across the app via `useSiteConfig()`:
+
+```ts
+export interface SiteConfig {
+  agency: AgencyConfig
+  theme: ThemeConfig
+}
+```
+
+`SiteConfig` pairs the active `AgencyConfig` with its resolved `ThemeConfig`. The `theme.ts` plugin resolves the theme at startup using `resolveTheme(agency.theme)` and injects CSS variables for the active theme via `themeToCssVars`.
+
+### `NavItem`
+
+Powers navigation configuration in `app/config/navigation.ts`:
+
+```ts
+export interface NavItem {
+  labelKey: string
+  to: string
+  module?: keyof AgencyModulesConfig
+}
+```
+
+<ParamField body="labelKey" type="string" required>
+  i18n translation key for the navigation label. Never raw text — always a key looked up via `$t()`.
+</ParamField>
+
+<ParamField body="to" type="string" required>
+  Route path (e.g. `'/properties'`, `'/contact'`).
+</ParamField>
+
+<ParamField body="module" type="keyof AgencyModulesConfig">
+  Optional module name. When set, layout components (`AppHeader`, `AppMobileMenu`, `AppFooter`) hide this nav entry when the corresponding module is disabled in `AgencyConfig.modules`.
+</ParamField>

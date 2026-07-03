@@ -1,0 +1,114 @@
+{
+  "projectType": "frontend",
+  "projectName": "Real Estate Template",
+  "projectDescription": "A white-label, multi-agency real estate website template built with Nuxt 4, Vue 3, TypeScript, and Tailwind CSS v4, designed to be fully customized per agency through configuration files and design tokens without editing component internals.",
+  "theme": "willow",
+  "primaryColor": "#0F766E",
+  "lightColor": "#F5F5F4",
+  "darkColor": "#111827",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Guide",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "project-structure"
+            ]
+          },
+          {
+            "group": "Customization",
+            "pages": [
+              "customization/agency-config",
+              "customization/theming",
+              "customization/data-and-content",
+              "customization/i18n",
+              "customization/modules"
+            ]
+          },
+          {
+            "group": "Architecture",
+            "pages": [
+              "architecture/overview",
+              "architecture/feature-modules",
+              "architecture/core-layer"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/build-and-deploy",
+              "deployment/seo-and-sitemaps",
+              "deployment/troubleshooting"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "groups": [
+          {
+            "group": "Components",
+            "pages": [
+              "reference/components/ui-components",
+              "reference/components/layout-components",
+              "reference/components/feature-components"
+            ]
+          },
+          {
+            "group": "Data Models",
+            "pages": [
+              "reference/models/property",
+              "reference/models/development",
+              "reference/models/agent",
+              "reference/models/agency-config",
+              "reference/models/theme-config"
+            ]
+          },
+          {
+            "group": "Services & Composables",
+            "pages": [
+              "reference/services/properties-service",
+              "reference/composables/use-site-config",
+              "reference/composables/use-page-seo"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "White-label multi-agency support via a single agency config file",
+    "CSS-variable-based design token system with swappable themes",
+    "Feature-first architecture with isolated business modules",
+    "Nuxt 4 app/ directory with SSR, SSG, and static export support",
+    "Built-in internationalization (English + Spanish) using @nuxtjs/i18n",
+    "Zod runtime validation for agency config and property data",
+    "Automatic sitemap.xml, robots.txt, and JSON-LD structured data",
+    "Property filtering with accent-insensitive search and stable sorting",
+    "Responsive, mobile-first layout with Swiper gallery and VueUse utilities",
+    "Module toggles to enable or disable features per agency (blog, agents, etc.)"
+  ],
+  "publicApiSurface": [
+    "AgencyConfig — app/types/agency.types.ts",
+    "ThemeConfig — app/types/theme.types.ts",
+    "Property / PropertyOperationType / PropertyType / PropertyStatus — app/features/properties/types/property.types.ts",
+    "Development / DevelopmentStatus — app/features/developments/types/development.types.ts",
+    "Agent — app/features/agents/types/agent.types.ts",
+    "propertiesService.getAll() / getBySlug() / filter() / getFeatured() / getRelated()",
+    "isPropertySort(value) type guard — app/features/properties/services/properties.service.ts",
+    "PropertySort type: 'featured' | 'price-asc' | 'price-desc'",
+    "useSiteConfig() composable — app/composables/useSiteConfig.ts",
+    "usePageSeo() composable — app/core/composables/usePageSeo.ts",
+    "useJsonLd() composable — app/core/composables/useJsonLd.ts",
+    "validateAgencyConfig() / safeParseAgencyConfig() — app/config/agencies/agency.schema.ts",
+    "resolveTheme(id: string) — app/themes/index.ts",
+    "themes registry — app/themes/index.ts",
+    "SiteConfig interface — app/types/site.types.ts",
+    "NavItem / SeoConfig — app/types/site.types.ts",
+    "pnpm dev / build / generate / preview / lint / lint:fix scripts"
+  ]
+}

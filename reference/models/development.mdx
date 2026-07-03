@@ -1,0 +1,144 @@
+---
+title: "Development data model for new-build projects"
+sidebarTitle: "Development"
+description: "The Development interface models a residential development or project. Covers status, price range, area range, delivery date, and optional unit and bedroom counts."
+---
+
+The `Development` interface models a residential or mixed-use project — such as a condominium tower, housing estate, or pre-sale community — as a distinct entity separate from individual property listings. A development can surface in homepage showcase sections, a dedicated developments gallery, and as the parent context for properties that carry a matching `developmentId`. The interface lives at `app/features/developments/types/development.types.ts` and follows the same backend-friendly design as `Property`: static MVP data can be replaced by an API response without modifying any component.
+
+<Note>
+  Unlike the `Property` model, `Development` currently has no Zod schema. The TypeScript compiler enforces the shape at build time. A future task may add a development schema mirroring the pattern in `app/features/properties/schemas/property.schema.ts`.
+</Note>
+
+---
+
+## `DevelopmentStatus` union
+
+```ts
+export type DevelopmentStatus =
+  | 'pre-sale'
+  | 'under-construction'
+  | 'ready-to-deliver'
+  | 'sold-out'
+```
+
+| Value | Meaning |
+|-------|---------|
+| `'pre-sale'` | Units are being offered before construction begins |
+| `'under-construction'` | Construction is actively in progress |
+| `'ready-to-deliver'` | Project is complete and units are ready for handover |
+| `'sold-out'` | All units have been sold or reserved |
+
+---
+
+## `Development` interface
+
+<ParamField body="id" type="string" required>
+  Unique development identifier. Used to cross-reference properties via `Property.developmentId`. Must be a non-empty string.
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  Display name of the development (e.g. `'Torre Esmeralda'`, `'Riverside Residences'`). Agency content — not an i18n key.
+</ParamField>
+
+<ParamField body="slug" type="string" required>
+  URL-safe identifier reserved for a future detail route at `/developments/[slug]`. Currently the slug is stored on the record for forward-compatibility but no routing logic consumes it yet. Keep it unique across the catalog to avoid conflicts when the detail page is implemented.
+</ParamField>
+
+<ParamField body="status" type="DevelopmentStatus" required>
+  Current build and sales status. See [`DevelopmentStatus`](#developmentstatus-union) above for allowed values.
+</ParamField>
+
+<ParamField body="location" type="string" required>
+  Human-readable neighborhood, city, and state string (e.g. `'Polanco, Mexico City'`). Agency content displayed on cards and showcase sections.
+</ParamField>
+
+<ParamField body="description" type="string" required>
+  Short marketing description of the project. Rendered on development cards and, when the detail page ships, the hero section. Agency content — not an i18n key.
+</ParamField>
+
+<ParamField body="image" type="string" required>
+  Cover image path served from `public/` (e.g. `'/images/developments/torre-esmeralda.jpg'`). Used as the primary visual on cards and showcase modules.
+</ParamField>
+
+<ParamField body="priceFrom" type="number">
+  Starting price of units in the development, expressed in `currency`. Optional — omit when pricing is not yet public (e.g. a pre-sale without announced prices).
+</ParamField>
+
+<ParamField body="priceTo" type="number">
+  Upper end of the price range, expressed in `currency`. Optional. When only `priceFrom` is set, components typically render it as `"From $X"`.
+</ParamField>
+
+<ParamField body="currency" type="string">
+  ISO 4217 currency code for `priceFrom` and `priceTo` (e.g. `'USD'`, `'MXN'`). Optional — components fall back to the agency `currency` at render time when this field is absent.
+</ParamField>
+
+<ParamField body="units" type="number">
+  Total number of units in the development (e.g. `48` apartments in a tower). Optional.
+</ParamField>
+
+<ParamField body="bedrooms" type="number">
+  Typical bedroom count for units in the development (e.g. `2` or `3`). Optional. When units have varying bedroom counts, this field conventionally holds the most common or minimum value.
+</ParamField>
+
+<ParamField body="sizeUnit" type="'metric' | 'imperial'">
+  Unit of measurement for `areaFrom` and `areaTo`. When omitted, components fall back to the agency `measurementUnit`. The area numbers are rendered **as-is** in the declared unit — the template performs **no automatic m² ↔ ft² conversion**. Set this per record when an agency's catalog mixes measurement systems.
+</ParamField>
+
+<ParamField body="areaFrom" type="number">
+  Smallest unit floor area in the development, expressed in `sizeUnit`. Optional.
+</ParamField>
+
+<ParamField body="areaTo" type="number">
+  Largest unit floor area in the development, expressed in `sizeUnit`. Optional. When only `areaFrom` is set, components typically render it as `"From X m²"`.
+</ParamField>
+
+<ParamField body="deliveryDate" type="string">
+  Expected delivery date as an ISO 8601 string. Accepts both `'YYYY-MM'` (month precision) and `'YYYY-MM-DD'` (day precision). Optional — omit when no delivery date has been announced. Example: `'2026-03'`.
+</ParamField>
+
+<ParamField body="featured" type="boolean">
+  When `true`, the development is highlighted in homepage showcase sections. Optional — defaults to non-featured behavior when absent.
+</ParamField>
+
+---
+
+## Size unit behavior
+
+The `sizeUnit` field follows the same per-record precedence rule as `Property.sizeUnit`:
+
+1. **Per-record value wins** — if `sizeUnit` is set on the `Development` record, that unit is used for `areaFrom` and `areaTo`.
+2. **Agency default fallback** — if `sizeUnit` is absent, components fall back to `AgencyConfig.measurementUnit`.
+3. **No auto-conversion** — the template never converts area values between metric and imperial. If a record stores `areaFrom: 85` with `sizeUnit: 'metric'`, it renders as `85 m²`. If the agency default is `'imperial'` but the record omits `sizeUnit`, it renders as `85 ft²` — the number is unchanged.
+
+This behavior means mixed-unit catalogs are supported, but it is the operator's responsibility to set `sizeUnit` consistently per record.
+
+---
+
+## Linking developments to properties
+
+Individual property listings can be associated with a development via `Property.developmentId`:
+
+```ts
+// In properties.ts
+{
+  id: 'prop-101',
+  developmentId: 'dev-torre-esmeralda',
+  // ...
+}
+
+// In developments.ts
+{
+  id: 'dev-torre-esmeralda',
+  name: 'Torre Esmeralda',
+  // ...
+}
+```
+
+`propertiesService.getRelated()` awards a **+2 score bonus** to properties that share the same `developmentId` as the current listing, making sibling units appear as the highest-priority related listings on the detail page.
+
+---
+
+## Future detail page
+
+The `slug` field is reserved for the route `/developments/[slug]`. When this page is implemented, `slug` will be used in the same pattern as `Property.slug` — a service method (`getBySlug`) will look up the development and return a 404 for missing or unlisted records. Until then, the field should be set on every record to avoid a future migration.

@@ -1,0 +1,287 @@
+---
+title: "propertiesService: filtering, sorting, and lookup"
+sidebarTitle: "propertiesService"
+description: "propertiesService is the single data access layer for the property catalog. Methods cover listing, slug lookup, filtered queries, featured sets, and related properties."
+---
+
+`propertiesService` is the **single point of entry** for all property data in the template. Every page and component that needs property records must go through this service — reading from `sampleProperties` directly is explicitly prohibited. This design means the backing data source can be swapped from the static MVP array to an API call (e.g. `$fetch('/api/properties')`) without touching a single component: only the service implementation changes.
+
+```ts
+import { propertiesService } from '~/features/properties/services/properties.service'
+```
+
+<Note>
+  All methods are **synchronous** over the static MVP data, which keeps SSR rendering deterministic. When a future async data source is introduced, the method signatures will gain a `Promise` wrapper but the filter/sort semantics documented here will remain identical.
+</Note>
+
+---
+
+## Supporting Types
+
+### `PropertyFilters`
+
+The typed filter shape accepted by [`filter()`](#filter). All fields are optional — an `undefined` value means "no constraint on this field", so callers can pass a raw `useRoute().query` object without sanitizing it first.
+
+```ts
+export interface PropertyFilters {
+  /** Match against `Property.operationType` — `'sale'` or `'rent'`. Exact, case-insensitive. */
+  operation?: string
+  /** Match against `Property.propertyType` — `'house'`, `'apartment'`, `'land'`, `'commercial'`, `'office'`. Exact, case-insensitive. */
+  type?: string
+  /**
+   * Free-text substring match against `Property.location`, `Property.city`,
+   * `Property.state` and `Property.country`. Accent-insensitive (NFD strip).
+   */
+  location?: string
+}
+```
+
+### `PropertySort`
+
+Allow-listed sort orders for the listing page. Additional values can be added here in the future without touching the data model.
+
+```ts
+export type PropertySort = 'featured' | 'price-asc' | 'price-desc'
+```
+
+| Value | Behavior |
+|---|---|
+| `'featured'` | Featured properties first, then by `id` ascending (default) |
+| `'price-asc'` | Cheapest first, `id` ascending as tiebreaker |
+| `'price-desc'` | Most expensive first, `id` ascending as tiebreaker |
+
+<Tip>
+  All three sort orders use `id.localeCompare()` as the tiebreaker. This guarantees a **stable, deterministic** order across SSR and CSR so hydration never produces a mismatch when two properties share the same sort key.
+</Tip>
+
+---
+
+## `isPropertySort`
+
+```ts
+function isPropertySort(value: unknown): value is PropertySort
+```
+
+A runtime type guard that validates an unknown value (typically a raw URL query parameter) against the `PropertySort` allow-list. Use this before passing a query param to [`filter()`](#filter).
+
+```ts
+import { isPropertySort } from '~/features/properties/services/properties.service'
+
+const raw = route.query.sort  // string | string[] | null | undefined
+const sort = isPropertySort(raw) ? raw : 'featured'
+```
+
+<ParamField path="value" type="unknown" required>
+  The value to test. Typically a raw `useRoute().query` field.
+</ParamField>
+
+<ResponseField name="returns" type="value is PropertySort">
+  `true` when `value` is one of `'featured'`, `'price-asc'`, or `'price-desc'`.
+</ResponseField>
+
+---
+
+## Methods
+
+### `getAll()`
+
+```ts
+getAll(): Property[]
+```
+
+Returns all **visible** properties from the catalog. Properties with `status: 'hidden'` are excluded. This is the base visibility gate that all other methods build on — when you need the full catalog without additional filters, use `getAll()` rather than accessing `sampleProperties` directly.
+
+<ResponseField name="returns" type="Property[]">
+  All non-hidden properties. May be an empty array if the catalog contains only hidden records.
+</ResponseField>
+
+**Example**
+
+```ts
+const all = propertiesService.getAll()
+console.log(all.length) // total visible properties
+```
+
+---
+
+### `getBySlug()`
+
+```ts
+getBySlug(slug: string): Property | undefined
+```
+
+Looks up a single **visible** property by its URL slug. Returns `undefined` when the slug is not found or when the matching property has `status: 'hidden'`. Route pages should map an `undefined` result to a 404 error.
+
+<ParamField path="slug" type="string" required>
+  The URL-safe slug string from `Property.slug`. Typically sourced from `route.params.slug`.
+</ParamField>
+
+<ResponseField name="returns" type="Property | undefined">
+  The matching property, or `undefined` when the slug does not exist or the property is hidden.
+</ResponseField>
+
+**Example**
+
+```ts
+const property = propertiesService.getBySlug(route.params.slug as string)
+
+if (!property) {
+  throw createError({ statusCode: 404, statusMessage: 'Property not found', fatal: true })
+}
+```
+
+<Warning>
+  **Never show hidden properties.** `getBySlug()` intentionally returns `undefined` for hidden records — even if the slug is valid — so a detail page can never be accessed by guessing the slug. Always map `undefined` to a 404.
+</Warning>
+
+---
+
+### `filter()`
+
+```ts
+filter(filters: PropertyFilters, sort?: PropertySort): Property[]
+```
+
+Filters the **visible** catalog by a typed set of criteria and returns the sorted result. Hidden properties are always excluded before filtering begins. Empty or `undefined` filter values are treated as "no constraint" so passing an unsanitized `route.query` object is safe.
+
+<ParamField path="filters" type="PropertyFilters" required>
+  A `PropertyFilters` object with optional `operation`, `type`, and `location` fields. Any field that is `undefined` or an empty string is ignored.
+</ParamField>
+
+<ParamField path="sort" type="PropertySort">
+  Sort order for the result set. Defaults to `'featured'` when omitted. Must be one of the `PropertySort` values; use [`isPropertySort()`](#ispropertysort) to validate raw URL params before passing them here.
+</ParamField>
+
+<ResponseField name="returns" type="Property[]">
+  The filtered and sorted list of visible properties. An empty array when no properties match the criteria.
+</ResponseField>
+
+**Filter semantics**
+
+| Field | Match strategy |
+|---|---|
+| `operation` | Exact match against `Property.operationType` (`sale` / `rent`), case-insensitive via `toLowerCase()` |
+| `type` | Exact match against `Property.propertyType` (`house`, `apartment`, `land`, `commercial`, `office`), case-insensitive |
+| `location` | Accent-insensitive **substring** match across `Property.location + city + state + country` (see note below) |
+
+<Tip>
+  **Accent-insensitive location search.** The location filter normalizes both the query and the property fields using Unicode NFD decomposition followed by combining-mark stripping (`/[\u0300-\u036f]/g`). This means a search for `"Mexico"` will match a property in `"México"`, and `"Queretaro"` will match `"Querétaro"` — no special characters required from the user.
+</Tip>
+
+**Example — filtering from URL query params**
+
+```ts
+// In a page <script setup>
+const route = useRoute()
+
+const filters = computed(() => ({
+  operation: route.query.operation as string | undefined,
+  type: route.query.type as string | undefined,
+  location: route.query.location as string | undefined,
+}))
+
+const sort = computed(() => {
+  const raw = route.query.sort
+  return isPropertySort(raw) ? raw : 'featured'
+})
+
+const properties = computed(() =>
+  propertiesService.filter(filters.value, sort.value)
+)
+```
+
+**URL query parameters** — the `/properties` listing page reads these four query params:
+
+| Param | Maps to | Notes |
+|---|---|---|
+| `operation` | `filters.operation` | `sale` or `rent` |
+| `type` | `filters.type` | `house`, `apartment`, `land`, `commercial`, `office` |
+| `location` | `filters.location` | Free text; accent-insensitive |
+| `sort` | sort argument | Validated via `isPropertySort()`; falls back to `'featured'` |
+
+---
+
+### `getFeatured()`
+
+```ts
+getFeatured(limit?: number): Property[]
+```
+
+Returns all visible properties whose `featured` flag is `true`. Accepts an optional limit for showcase widgets that display only a fixed number of cards (e.g. the homepage hero section renders three featured properties).
+
+<ParamField path="limit" type="number">
+  Maximum number of properties to return. When omitted, all featured properties are returned.
+</ParamField>
+
+<ResponseField name="returns" type="Property[]">
+  Visible, featured properties — sliced to `limit` when provided.
+</ResponseField>
+
+**Example**
+
+```ts
+// Homepage hero: show at most 3 featured properties
+const featuredProperties = propertiesService.getFeatured(3)
+```
+
+---
+
+### `getRelated()`
+
+```ts
+getRelated(current: Property, limit?: number): Property[]
+```
+
+Finds properties similar to `current` using a weighted scoring model over the visible catalog. The result is used by the related-properties section on the property detail page. Sold, rented, hidden, and reserved-but-zero-score properties are excluded. The `current` property itself is always excluded from results.
+
+<ParamField path="current" type="Property" required>
+  The reference property. Its `propertyType`, `operationType`, `city`, `country`, `developmentId`, `agentId`, and `price` fields drive the scoring weights.
+</ParamField>
+
+<ParamField path="limit" type="number">
+  Maximum number of related properties to return. Defaults to `3`.
+</ParamField>
+
+<ResponseField name="returns" type="Property[]">
+  Up to `limit` related properties ordered by score descending, then by `featured` descending, then by `id` ascending for determinism.
+</ResponseField>
+
+**Scoring weights**
+
+| Criterion | Points |
+|---|---|
+| Same `propertyType` | +3 |
+| Same `operationType` | +2 |
+| Same `city` | +2 |
+| Same `country` (only when city did not match) | +1 |
+| Same `developmentId` (sibling units in a project) | +2 |
+| Same `agentId` | +1 |
+| Price within 30% of `current.price` | +1 |
+
+**Eligibility filter:** Only properties with `status === 'available'` or `status === 'reserved'` are eligible as related candidates. Sold, rented, and hidden properties are never surfaced.
+
+**Graceful fallback:** When no candidates score above zero — for example in a near-empty catalog — the method falls back to `getFeatured(limit)`, applying the same eligibility filter so the current property and non-available records are still excluded.
+
+**Example**
+
+```ts
+// In the property detail page
+const related = computed(() => propertiesService.getRelated(p, 3))
+```
+
+---
+
+## Architecture Notes
+
+**Components must never import `sampleProperties` directly.** All reads go through `propertiesService` so the data source can be replaced (e.g. swapped to `$fetch('/api/properties')`) without touching the component tree.
+
+```ts
+// ✅ Correct — all access through the service
+import { propertiesService } from '~/features/properties/services/properties.service'
+const properties = propertiesService.getAll()
+
+// ❌ Incorrect — bypasses the visibility gate and the service contract
+import { sampleProperties } from '~/features/properties/data/properties'
+```
+
+The `Property` type and all its supporting union types (`PropertyOperationType`, `PropertyType`, `PropertyStatus`, `PropertyCoordinates`) live in `~/features/properties/types/property.types.ts`. A matching Zod runtime schema is available at `~/features/properties/schemas/property.schema.ts` for validating external data at the boundary before it enters the service layer.

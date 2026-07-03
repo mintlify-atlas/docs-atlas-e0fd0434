@@ -1,0 +1,308 @@
+---
+title: "usePageSeo() and useJsonLd(): per-page SEO setup"
+sidebarTitle: "usePageSeo"
+description: "usePageSeo() sets per-page title, description, canonical URL, Open Graph, and Twitter meta. useJsonLd() injects schema.org structured data as a JSON-LD script block."
+---
+
+Every page in the template needs the same boilerplate: strip the trailing slash from `siteUrl`, build an absolute URL for the canonical link, resolve the social image, set the Twitter card type, and read the active locale for `og:locale`. `usePageSeo()` centralizes all of that infrastructure so pages never duplicate it. Each page still calls `useSeoMeta()` and `useHead()` itself — keeping the title, description, and any page-specific overrides (like `ogType: 'article'` on the property detail page) explicitly readable at the call site. `useJsonLd()` is a thin companion that handles the `<script type="application/ld+json">` boilerplate so pages just pass their schema.org payload.
+
+<Note>
+  `usePageSeo` is **not** added to Nuxt's auto-import `imports.dirs` in `nuxt.config.ts`. It must be imported explicitly on every page. This is intentional: SEO setup is a page-level concern and the explicit import makes every call site auditable. `useJsonLd` is in `~/core/composables/` which is listed in `imports.dirs`, but the same convention of explicit imports is recommended.
+</Note>
+
+---
+
+## `usePageSeo()`
+
+```ts
+import { usePageSeo } from '~/core/composables/usePageSeo'
+```
+
+### Signature
+
+```ts
+function usePageSeo(options?: UsePageSeoOptions): UsePageSeoResult
+```
+
+### Options
+
+```ts
+export interface UsePageSeoOptions {
+  /**
+   * Optional social image path or reactive ref. When omitted, the agency
+   * logo (`site.value.agency.logo`) is used as the default.
+   */
+  image?: MaybeRef<string | undefined>
+}
+```
+
+<ParamField path="options.image" type="MaybeRef<string | undefined>">
+  The social image for Open Graph and Twitter cards. Accepts a static string or a `ref` / `computed` so a per-record page (e.g. the property detail page) can pass a reactive `coverImage`. When omitted, `usePageSeo()` falls back to the agency logo, and then to the `defaultSeoConfig.ogImage` placeholder (`/images/logo.svg`) when the logo is also empty.
+</ParamField>
+
+### Return Value
+
+```ts
+export interface UsePageSeoResult {
+  siteUrl: ComputedRef<string>
+  toAbsoluteUrl: (path: string) => string
+  canonicalUrl: ComputedRef<string | null>
+  ogImage: ComputedRef<string>
+  twitterImage: ComputedRef<string>
+  twitterCard: string
+  ogLocale: ComputedRef<string>
+  siteName: string
+}
+```
+
+<ResponseField name="siteUrl" type="ComputedRef<string>">
+  The normalized site base URL from `runtimeConfig.public.siteUrl`, with any trailing slash stripped. Empty string when `NUXT_PUBLIC_SITE_URL` is not set (e.g. during local development).
+</ResponseField>
+
+<ResponseField name="toAbsoluteUrl" type="(path: string) => string">
+  Converts a public path or relative URL into an absolute URL by prepending `siteUrl`. Returns the input unchanged when the input is already an absolute `http(s)://` URL, when `siteUrl` is empty, or when `path` is an empty string.
+</ResponseField>
+
+<ResponseField name="canonicalUrl" type="ComputedRef<string | null>">
+  The absolute canonical URL for the current route: `siteUrl + route.path`. Returns `null` when `siteUrl` is not configured — callers should omit the `<link rel="canonical">` and `og:url` tags in that case rather than emitting a broken relative URL.
+</ResponseField>
+
+<ResponseField name="ogImage" type="ComputedRef<string>">
+  The absolute URL for the Open Graph social image. Resolves through `options.image → agency.logo → defaultSeoConfig.ogImage`, then makes the path absolute via `toAbsoluteUrl`.
+</ResponseField>
+
+<ResponseField name="twitterImage" type="ComputedRef<string>">
+  The absolute URL for the Twitter card social image. Follows the same resolution chain as `ogImage`.
+</ResponseField>
+
+<ResponseField name="twitterCard" type="string">
+  The Twitter card type from `defaultSeoConfig.twitterCard`. Currently `'summary_large_image'` for the entire site.
+</ResponseField>
+
+<ResponseField name="ogLocale" type="ComputedRef<string>">
+  The active locale code from `useI18n().locale` (e.g. `'en'`, `'es'`). Used as the `og:locale` value.
+</ResponseField>
+
+<ResponseField name="siteName" type="string">
+  The agency display name from `useSiteConfig().value.agency.name`. Used as the `og:site_name` value.
+</ResponseField>
+
+---
+
+## Full Page SEO Pattern
+
+`usePageSeo()` provides the building blocks; each page assembles the final tags with `useSeoMeta()` and `useHead()`. This separation keeps page-specific options — like `ogType`, a custom description, or a per-property cover image — explicitly visible at the call site.
+
+```ts
+// In <script setup> of a page
+import { computed } from 'vue'
+import { usePageSeo } from '~/core/composables/usePageSeo'
+
+const { t } = useI18n()
+const {
+  canonicalUrl,
+  ogImage,
+  twitterImage,
+  twitterCard,
+  ogLocale,
+  siteName,
+} = usePageSeo()
+
+const seoTitle = computed(() => t('properties.seo.title', { agencyName: siteName }))
+const seoDescription = computed(() => t('properties.seo.description'))
+
+useSeoMeta({
+  title: () => seoTitle.value,
+  description: () => seoDescription.value,
+  ogTitle: () => seoTitle.value,
+  ogDescription: () => seoDescription.value,
+  ogType: 'website',
+  ogImage: () => ogImage.value,
+  ogSiteName: () => siteName,
+  ogLocale: () => ogLocale.value,
+  ogUrl: () => canonicalUrl.value ?? undefined,
+  twitterCard,
+  twitterTitle: () => seoTitle.value,
+  twitterDescription: () => seoDescription.value,
+  twitterImage: () => twitterImage.value,
+})
+
+useHead({
+  link: [
+    // Omit the canonical tag entirely when siteUrl is not configured.
+    // An empty or relative canonical confuses crawlers more than no tag at all.
+    ...(canonicalUrl.value
+      ? [{ rel: 'canonical', href: canonicalUrl.value }]
+      : []),
+  ],
+})
+```
+
+<Tip>
+  **Resolve i18n strings before passing them.** Call `t('seo.someKey')` in the page `<script setup>` and pass the resolved (or reactive) string to `useSeoMeta`. Do not pass raw i18n keys — `useSeoMeta` has no awareness of your i18n setup.
+</Tip>
+
+### Property detail page — per-record social image
+
+The detail page passes the property's own `coverImage` as the `image` option so every listing gets a unique Open Graph share preview:
+
+```ts
+import { computed } from 'vue'
+import { usePageSeo } from '~/core/composables/usePageSeo'
+
+// `p` is the resolved Property object
+const { canonicalUrl, ogImage, twitterImage, twitterCard, ogLocale, siteName } = usePageSeo({
+  image: computed(() => p.coverImage),
+})
+
+useSeoMeta({
+  title: () => `${p.title} | ${siteName}`,
+  description: () => p.description,
+  ogTitle: () => p.title,
+  ogType: 'article',           // Record pages use 'article', not 'website'
+  ogImage: () => ogImage.value,
+  // ...
+})
+```
+
+### `siteUrl` and development environments
+
+`siteUrl` is populated from the `NUXT_PUBLIC_SITE_URL` environment variable. It is intentionally empty by default so the project builds and runs without any configuration. When `siteUrl` is empty:
+
+- `canonicalUrl` returns `null`
+- `toAbsoluteUrl()` returns the input path unchanged
+- `og:url` and `<link rel="canonical">` are omitted from the rendered HTML
+
+This is deliberate — a canonical pointing to `localhost` is worse than no canonical at all.
+
+<Note>
+  Set `NUXT_PUBLIC_SITE_URL=https://yourdomain.com` in your production environment (or `.env` file) to enable canonical links and absolute Open Graph URLs.
+</Note>
+
+---
+
+## `useJsonLd()`
+
+```ts
+import { useJsonLd } from '~/core/composables/useJsonLd'
+```
+
+A thin helper that emits a `<script type="application/ld+json">` block into the page `<head>`. It wraps Nuxt's `useHead` with the correct `innerHTML` callback pattern so the JSON is serialized at SSR time, matching Nuxt's head-management lifecycle.
+
+### Signature
+
+```ts
+function useJsonLd(data: MaybeRefOrGetter<Record<string, unknown>>): void
+```
+
+<ParamField path="data" type="MaybeRefOrGetter<Record<string, unknown>>" required>
+  The schema.org JSON-LD payload. Accepts a plain object, a `ref`, or a getter function (`() => ({ ... })`) so callers can compose the payload reactively from `computed` values without ceremony. The value is serialized with `JSON.stringify` at render time.
+</ParamField>
+
+### Usage
+
+Call `useJsonLd` once in the page `<script setup>` block with a `computed` that builds the schema.org payload:
+
+```ts
+import { computed } from 'vue'
+import { useJsonLd } from '~/core/composables/useJsonLd'
+
+const { toAbsoluteUrl, canonicalUrl, siteName } = usePageSeo()
+const site = useSiteConfig()
+
+const jsonLd = computed(() => ({
+  '@context': 'https://schema.org',
+  '@type': 'ItemList',
+  itemListElement: properties.value.map((property, index) => ({
+    '@type': 'ListItem',
+    position: index + 1,
+    url: toAbsoluteUrl(`/properties/${property.slug}`),
+    name: property.title,
+  })),
+}))
+
+useJsonLd(jsonLd)
+```
+
+<Warning>
+  Absolute URLs in `@id`, `url`, and `image` fields inside JSON-LD payloads require `siteUrl` to be configured. When `siteUrl` is empty, `toAbsoluteUrl()` returns relative paths — these are valid JSON-LD but will not resolve correctly in Google's Rich Results Test. Use conditional spreading to omit `url` when `canonicalUrl.value` is `null`, as shown in the contact and about page examples below.
+</Warning>
+
+---
+
+## JSON-LD Schemas by Page
+
+Each page in the template emits a schema.org structured data block appropriate to its content. The table below maps every route to its schema type, matching the actual `@type` values in the source.
+
+| Route | Schema `@type` | Notes |
+|---|---|---|
+| `/` (home) | `RealEstateAgent` | Agency identity node — `@id` set to `toAbsoluteUrl('/')` for cross-page graph consistency |
+| `/properties` | `ItemList` (of `ListItem`) | One `ListItem` per visible property in the current filtered result set |
+| `/properties/[slug]` | `RealEstateListing` | Detail page; availability mapped from `PropertyStatus`; `floorSize` with UN/CEFACT unit code |
+| `/agents` | `ItemList` (of `Person`) | Each `Person` has a `worksFor: RealEstateAgent` back-reference to the agency home page |
+| `/contact` | `ContactPage` | `mainEntity` is a `RealEstateAgent` node with the same `@id` as the home page |
+| `/about` | `AboutPage` | `mainEntity` is a `RealEstateAgent` node consistent with the home and contact pages |
+
+### Cross-page entity consistency
+
+The home page, contact page, and about page all emit a `RealEstateAgent` node whose `@id` is `toAbsoluteUrl('/')`. This tells Google's knowledge graph that all three nodes refer to the same agency entity, allowing it to merge the information (address from the contact page, social links from the home page, description from the about page) into a single rich result.
+
+```ts
+// Home page — the primary agency node
+const jsonLd = computed(() => ({
+  '@context': 'https://schema.org',
+  '@type': 'RealEstateAgent',
+  '@id': toAbsoluteUrl('/'),
+  name: agency.name,
+  logo: toAbsoluteUrl(agency.logo),
+  telephone: agency.contact.phone,
+  email: agency.contact.email,
+  address: agency.contact.address,
+  sameAs,
+  ...(canonicalUrl.value ? { url: canonicalUrl.value } : {}),
+}))
+
+// Contact page — same @id ties back to the home page node
+const jsonLd = computed(() => ({
+  '@context': 'https://schema.org',
+  '@type': 'ContactPage',
+  name: seoTitle.value,
+  ...(canonicalUrl.value ? { url: canonicalUrl.value } : {}),
+  mainEntity: {
+    '@type': 'RealEstateAgent',
+    '@id': toAbsoluteUrl('/'),
+    // ...contact fields
+  },
+}))
+```
+
+### Agents page — `ItemList` of `Person`
+
+Each agent is wrapped in a `ListItem` with a `Person` item. The `worksFor` field points back to the agency's home-page node:
+
+```ts
+const jsonLd = computed(() => ({
+  '@context': 'https://schema.org',
+  '@type': 'ItemList',
+  itemListElement: agents.value.map((agent, index) => ({
+    '@type': 'ListItem',
+    position: index + 1,
+    item: {
+      '@type': 'Person',
+      name: agent.name,
+      jobTitle: agent.role,
+      description: agent.bio,
+      image: toAbsoluteUrl(agent.image),
+      ...(agent.phone ? { telephone: agent.phone } : {}),
+      ...(agent.email ? { email: agent.email } : {}),
+      worksFor: {
+        '@type': 'RealEstateAgent',
+        name: site.value.agency.name,
+        url: toAbsoluteUrl('/'),
+      },
+    },
+  })),
+}))
+
+useJsonLd(jsonLd)
+```

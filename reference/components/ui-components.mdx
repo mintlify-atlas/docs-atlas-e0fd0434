@@ -1,0 +1,438 @@
+---
+title: "Base UI components: props, variants, and usage"
+sidebarTitle: "UI Components"
+description: "The Base* primitives are generic, theme-aware building blocks. Document props, variants, and usage examples for BaseButton, BaseCard, BaseBadge, and more."
+---
+
+The `Base*` components are the foundation of the Real Estate Template's design system. Every primitive lives in `app/components/ui/` and is intentionally business-agnostic — a `BaseButton` knows nothing about properties, agents, or listings. All visual decisions (color, radius, shadow, typography) are driven by `var(--color-*)`, `var(--radius-*)`, and `var(--shadow-*)` CSS variables that the active theme injects at the `:root`. Swapping a theme file therefore rebrands the entire UI without touching a single component.
+
+---
+
+## BaseButton
+
+The `BaseButton` component is the single entry point for all interactive actions in the template. Rather than rendering a fixed element, it selects the most semantically correct root element at runtime:
+
+1. An `<a>` tag when `href` is provided (external links, `tel:`, `mailto:`).
+2. A `<NuxtLink>` when `to` is provided (internal client-side navigation).
+3. A native `<button>` otherwise (form actions, JavaScript callbacks).
+
+This single-root strategy avoids Vue 3 fragment attribute fallthrough issues that would silently drop attributes like `href` or `type`.
+
+### Props
+
+<ParamField path="variant" type="'primary' | 'secondary' | 'outline' | 'ghost'" default="'primary'">
+  Controls the visual style of the button. All variants map to theme tokens, never hardcoded colors.
+
+  | Value | Appearance |
+  |---|---|
+  | `primary` | Solid `--color-primary` background with `--color-primary-foreground` text |
+  | `secondary` | Solid `--color-secondary` background with `--color-secondary-foreground` text |
+  | `outline` | Transparent background with a `--color-border` border; hover fills `--color-surface-muted` |
+  | `ghost` | Transparent background with no border; hover fills `--color-surface-muted` |
+</ParamField>
+
+<ParamField path="size" type="'sm' | 'md' | 'lg'" default="'md'">
+  Controls height and horizontal padding.
+
+  | Value | Height | Padding | Font size |
+  |---|---|---|---|
+  | `sm` | `h-9` | `px-3` | `text-sm` |
+  | `md` | `h-11` | `px-5` | `text-sm` |
+  | `lg` | `h-12` | `px-6` | `text-base` |
+</ParamField>
+
+<ParamField path="to" type="string">
+  Internal route path passed to `<NuxtLink>`. When provided, the button renders as a router link. Takes priority over the native `<button>` fallback.
+</ParamField>
+
+<ParamField path="href" type="string">
+  External URL. When provided, the button renders as an `<a>` element. Takes the highest render priority over `to` and native button.
+</ParamField>
+
+<ParamField path="target" type="'_blank' | '_self' | '_parent' | '_top'">
+  Forwarded to the underlying `<a>` element. When `target="_blank"` is set, the `rel` attribute automatically becomes `"noopener noreferrer"` unless overridden.
+</ParamField>
+
+<ParamField path="rel" type="string">
+  Overrides the auto-computed `rel` attribute. Only applies when `href` is provided.
+</ParamField>
+
+<ParamField path="type" type="'button' | 'submit' | 'reset'" default="'button'">
+  Native button type. Only applies when neither `href` nor `to` is provided.
+</ParamField>
+
+<ParamField path="block" type="boolean" default="false">
+  When `true`, adds `w-full` so the button stretches to fill its container. Useful for mobile-first CTAs inside cards or forms.
+</ParamField>
+
+<ParamField path="disabled" type="boolean" default="false">
+  Disables the native button. Applies `disabled:pointer-events-none disabled:opacity-50` via Tailwind.
+</ParamField>
+
+### Slots
+
+The default slot renders inside the button element. Combine it with `BaseIcon` to build icon + text or icon-only buttons.
+
+### Usage examples
+
+```vue
+<!-- Primary CTA navigating to an internal route -->
+<BaseButton to="/properties" variant="primary" size="lg">
+  Browse Properties
+</BaseButton>
+
+<!-- Outline button as a secondary action -->
+<BaseButton to="/contact" variant="outline" size="md">
+  Get in Touch
+</BaseButton>
+
+<!-- External link opening in a new tab -->
+<BaseButton href="https://wa.me/15551234567" target="_blank" variant="primary">
+  <BaseIcon name="mdi:whatsapp" size="sm" />
+  WhatsApp
+</BaseButton>
+
+<!-- Full-width submit button in a form -->
+<BaseButton type="submit" :block="true" variant="primary" size="lg">
+  Send Message
+</BaseButton>
+
+<!-- Ghost button for low-emphasis actions -->
+<BaseButton variant="ghost" size="sm">
+  Clear Filters
+</BaseButton>
+```
+
+---
+
+## BaseCard
+
+`BaseCard` is a themed surface container used throughout the template — property cards, agent cards, development cards, contact forms, and feature panels all build on top of it. It provides two named slots: `media` for edge-to-edge content (images, maps) that renders without padding, and the default slot for padded body content.
+
+### Props
+
+<ParamField path="as" type="string" default="'div'">
+  The HTML element or component to render as the card root. Pass `'article'` for semantically meaningful cards (e.g. properties), `'li'` when the card is inside a `<ul>` grid.
+</ParamField>
+
+<ParamField path="padding" type="'none' | 'sm' | 'md' | 'lg'" default="'md'">
+  Inner padding applied to the default slot content.
+
+  | Value | Class |
+  |---|---|
+  | `none` | No padding |
+  | `sm` | `p-4` |
+  | `md` | `p-6` |
+  | `lg` | `p-8` |
+</ParamField>
+
+<ParamField path="shadow" type="'none' | 'sm' | 'md' | 'lg'" default="'sm'">
+  Box shadow depth pulled from the theme shadow tokens `--shadow-sm`, `--shadow-md`, and `--shadow-lg`.
+</ParamField>
+
+<ParamField path="radius" type="'md' | 'lg' | 'xl'" default="'lg'">
+  Border radius pulled from the theme radius tokens `--radius-md`, `--radius-lg`, and `--radius-xl`.
+</ParamField>
+
+<ParamField path="interactive" type="boolean" default="false">
+  When `true`, adds a `transition-shadow` hover effect that lifts the card to `--shadow-md` on pointer hover — used for clickable property, agent, and development cards.
+</ParamField>
+
+### Slots
+
+| Slot | Description |
+|---|---|
+| `media` | Edge-to-edge content with no padding. Renders above the default slot. Ideal for cover images. |
+| `default` | Padded body content. Respects the `padding` prop. |
+
+### Usage examples
+
+```vue
+<!-- Image-first property card shell -->
+<BaseCard padding="none" radius="lg" shadow="sm" :interactive="true" as="article">
+  <template #media>
+    <ResponsiveImage
+      src="/images/property-hero.jpg"
+      alt="Modern apartment in downtown"
+      ratio="4/3"
+      rounded="none"
+    />
+  </template>
+  <div class="p-5">
+    <BaseHeading :level="3" size="md">Modern Downtown Apartment</BaseHeading>
+    <p class="mt-1 text-sm text-[var(--color-muted)]">Centro, Mexico City</p>
+  </div>
+</BaseCard>
+
+<!-- Simple content card with padding -->
+<BaseCard padding="lg" shadow="md" radius="xl">
+  <BaseHeading :level="2" size="xl">Contact Us</BaseHeading>
+  <p class="mt-2 text-[var(--color-muted)]">Fill in the form below and we'll be in touch.</p>
+</BaseCard>
+```
+
+---
+
+## BaseBadge
+
+`BaseBadge` renders a small pill-shaped label used for property status chips, operation type tags (For Sale / For Rent), agent specialty tags, and development status indicators. Brand variants (`primary`, `secondary`, `accent`) use solid theme colors. Status variants (`success`, `warning`, `error`) use a soft tinted background via CSS `color-mix()` so they stay legible on any theme without requiring dedicated foreground tokens.
+
+### Props
+
+<ParamField path="variant" type="'primary' | 'secondary' | 'accent' | 'neutral' | 'success' | 'warning' | 'error'" default="'neutral'">
+  Determines background and text color.
+
+  | Value | Background | Text |
+  |---|---|---|
+  | `primary` | `--color-primary` | `--color-primary-foreground` |
+  | `secondary` | `--color-secondary` | `--color-secondary-foreground` |
+  | `accent` | `--color-accent` | `--color-accent-foreground` |
+  | `neutral` | `--color-surface-muted` | `--color-foreground` |
+  | `success` | 14% tint of `--color-success` | `--color-success` |
+  | `warning` | 16% tint of `--color-warning` | `--color-warning` |
+  | `error` | 14% tint of `--color-error` | `--color-error` |
+</ParamField>
+
+<ParamField path="size" type="'sm' | 'md'" default="'sm'">
+  Controls padding and font size.
+
+  | Value | Classes |
+  |---|---|
+  | `sm` | `px-2 py-0.5 text-xs` |
+  | `md` | `px-2.5 py-1 text-sm` |
+</ParamField>
+
+### Slots
+
+The default slot renders the badge label text. You can also place a `BaseIcon` inside for an icon-prefixed badge.
+
+### Usage examples
+
+```vue
+<!-- Property operation type -->
+<BaseBadge variant="primary" size="sm">For Sale</BaseBadge>
+
+<!-- Property reserved status -->
+<BaseBadge variant="warning" size="sm">Reserved</BaseBadge>
+
+<!-- Development pre-sale phase -->
+<BaseBadge variant="accent" size="sm">Pre-Sale</BaseBadge>
+
+<!-- Neutral agent specialty tag -->
+<BaseBadge variant="neutral" size="sm">Luxury Properties</BaseBadge>
+
+<!-- Icon + text badge -->
+<BaseBadge variant="success" size="md">
+  <BaseIcon name="mdi:check-circle-outline" size="sm" />
+  Ready to Deliver
+</BaseBadge>
+```
+
+---
+
+## BaseContainer
+
+`BaseContainer` is a thin layout utility that constrains content width and adds responsive horizontal padding. It uses `--container-max-width` from the theme token system rather than a hardcoded Tailwind `max-w-7xl`, so the maximum width can be adjusted per theme. By default it renders a `<div>`, but any semantic element can be substituted via the `as` prop.
+
+### Props
+
+<ParamField path="as" type="string" default="'div'">
+  The HTML element to render as the container root. Common values: `'section'`, `'header'`, `'footer'`, `'nav'`, `'main'`.
+</ParamField>
+
+### Slots
+
+The default slot holds the constrained content.
+
+### Usage examples
+
+```vue
+<!-- Simple centered content wrapper -->
+<BaseContainer>
+  <h1>Welcome to Our Agency</h1>
+</BaseContainer>
+
+<!-- Semantic section container -->
+<BaseContainer as="section" class="py-12">
+  <SectionHeader title="Featured Properties" />
+</BaseContainer>
+
+<!-- Used inside AppHeader to set the header inner layout -->
+<BaseContainer as="div" class="flex h-16 items-center justify-between gap-4">
+  <AppLogo />
+  <AppNavbar :items="navItems" />
+</BaseContainer>
+```
+
+---
+
+## BaseSection
+
+`BaseSection` wraps page sections with consistent vertical rhythm and optional background tone. By default it renders a `<section>` element and automatically wraps its content in a `BaseContainer`. Set `container` to `false` for full-bleed backgrounds (e.g. hero panels, CTA bands).
+
+### Props
+
+<ParamField path="as" type="string" default="'section'">
+  The HTML element to render as the section root.
+</ParamField>
+
+<ParamField path="tone" type="'default' | 'muted' | 'primary'" default="'default'">
+  Background tone applied to the section.
+
+  | Value | Background |
+  |---|---|
+  | `default` | Transparent (inherits `--color-background`) |
+  | `muted` | `--color-surface-muted` |
+  | `primary` | `--color-primary` with `--color-primary-foreground` text |
+</ParamField>
+
+<ParamField path="spacing" type="'none' | 'sm' | 'md' | 'lg'" default="'lg'">
+  Vertical padding applied to the section.
+
+  | Value | Classes |
+  |---|---|
+  | `none` | No padding |
+  | `sm` | `py-8 sm:py-10` |
+  | `md` | `py-12 sm:py-16` |
+  | `lg` | `py-12 sm:py-16 lg:py-24` |
+</ParamField>
+
+<ParamField path="container" type="boolean" default="true">
+  When `true` (default), wraps content in a `BaseContainer`. Set to `false` for full-bleed content that spans the entire viewport width.
+</ParamField>
+
+### Slots
+
+The default slot holds the section content. When `container` is `true`, it is automatically wrapped in a `BaseContainer`.
+
+### Usage examples
+
+```vue
+<!-- Standard section with default large spacing -->
+<BaseSection>
+  <SectionHeader title="Why Choose Us" />
+  <div class="mt-8 grid grid-cols-1 gap-6 md:grid-cols-3">
+    <FeatureItem icon="mdi:home-heart" title="Local Expertise" />
+    <FeatureItem icon="mdi:shield-check" title="Trusted Agency" />
+    <FeatureItem icon="mdi:handshake" title="Personal Service" />
+  </div>
+</BaseSection>
+
+<!-- Muted background section -->
+<BaseSection tone="muted" spacing="md">
+  <PropertyGrid :properties="featuredProperties" />
+</BaseSection>
+
+<!-- Full-bleed primary band with no inner container -->
+<BaseSection tone="primary" :container="false" spacing="sm">
+  <div class="max-w-7xl mx-auto px-4 text-center">
+    <p>Special offer: 0% commission this month.</p>
+  </div>
+</BaseSection>
+```
+
+---
+
+## BaseHeading
+
+`BaseHeading` separates semantic heading level from visual size, solving a common accessibility pitfall where developers change the DOM heading tag just to get a different font size. The `level` prop controls which `h1`–`h6` element is emitted; the `size` prop independently controls the visual scale. When `size` is omitted, a sensible default scale is applied based on `level`.
+
+### Props
+
+<ParamField path="level" type="1 | 2 | 3 | 4 | 5 | 6" default="2">
+  The semantic HTML heading element to render (`h1` through `h6`). Always choose the correct heading for document structure — use `size` to adjust visual scale independently.
+</ParamField>
+
+<ParamField path="size" type="'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl'">
+  The visual font size. When omitted, defaults to the size that maps to the `level`:
+
+  | Level | Default size |
+  |---|---|
+  | `1` | `3xl` (`text-4xl sm:text-5xl`) |
+  | `2` | `2xl` (`text-3xl sm:text-4xl`) |
+  | `3` | `xl` (`text-3xl`) |
+  | `4` | `lg` (`text-2xl`) |
+  | `5` | `md` (`text-lg`) |
+  | `6` | `sm` (`text-base`) |
+</ParamField>
+
+<ParamField path="serif" type="boolean" default="false">
+  When `true`, uses `--font-serif` instead of `--font-heading`. Intended for luxury or editorial themes that pair a sans-serif body with a serif display font.
+</ParamField>
+
+### Slots
+
+The default slot renders the heading text content.
+
+### Usage examples
+
+```vue
+<!-- Hero h1 with maximum visual scale -->
+<BaseHeading :level="1" size="3xl">
+  Find Your Dream Home in Mexico City
+</BaseHeading>
+
+<!-- Section h2 with default size -->
+<BaseHeading :level="2">Featured Properties</BaseHeading>
+
+<!-- Card title: h3 with compact md size -->
+<BaseHeading :level="3" size="md">
+  Modern Apartment in Polanco
+</BaseHeading>
+
+<!-- Luxury editorial heading using serif font -->
+<BaseHeading :level="2" size="2xl" :serif="true">
+  Exceptional Living Spaces
+</BaseHeading>
+```
+
+---
+
+## BaseIcon
+
+`BaseIcon` is a thin accessibility-focused wrapper around the Nuxt Icon component. It standardizes icon sizing across the template and handles the `aria-label` / `aria-hidden` toggle automatically: when a `label` is provided the icon is announced to assistive technology with `role="img"`; when omitted it is marked `aria-hidden="true"` so screen readers skip it as decorative.
+
+### Props
+
+<ParamField path="name" type="string" required>
+  The Nuxt Icon name to render. The template uses `mdi:*` (Material Design Icons) and `simple-icons:*` prefixes throughout. Examples: `"mdi:bed-outline"`, `"mdi:map-marker-outline"`, `"simple-icons:tiktok"`.
+</ParamField>
+
+<ParamField path="size" type="'sm' | 'md' | 'lg' | 'xl'" default="'md'">
+  Applies a fixed width/height via Tailwind utility classes.
+
+  | Value | Classes |
+  |---|---|
+  | `sm` | `h-4 w-4` |
+  | `md` | `h-5 w-5` |
+  | `lg` | `h-6 w-6` |
+  | `xl` | `h-8 w-8` |
+</ParamField>
+
+<ParamField path="label" type="string">
+  Accessible label. When provided, adds `role="img"` and `aria-label` so the icon conveys meaning to screen reader users. When omitted, the icon is hidden from the accessibility tree as a purely decorative element.
+</ParamField>
+
+### Usage examples
+
+```vue
+<!-- Decorative icon next to visible text (no label needed) -->
+<BaseIcon name="mdi:map-marker-outline" size="sm" />
+<span>Polanco, Mexico City</span>
+
+<!-- Standalone icon button with accessible label -->
+<button type="button" aria-label="Open map">
+  <BaseIcon name="mdi:map" size="lg" label="Map view" />
+</button>
+
+<!-- Feature stat with labeled icon -->
+<li class="flex items-center gap-1.5">
+  <BaseIcon name="mdi:bed-outline" size="sm" :label="$t('properties.features.bedrooms')" />
+  <span>3</span>
+</li>
+
+<!-- Social media icon (decorative, text label on parent element) -->
+<a href="https://instagram.com/agency" aria-label="Instagram">
+  <BaseIcon name="mdi:instagram" size="lg" />
+</a>
+```

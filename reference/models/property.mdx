@@ -1,0 +1,312 @@
+---
+title: "Property data model and Zod schema reference"
+sidebarTitle: "Property"
+description: "The Property interface defines the full shape of a real estate listing. Includes operationType, propertyType, status unions, optional size fields, and coordinate support."
+---
+
+The `Property` interface is the core domain model of the template. Every listing card, detail page, sitemap entry, and JSON-LD block is derived from this shape. The interface lives at `app/features/properties/types/property.types.ts` and is intentionally backend-friendly: the same fields map cleanly to a typical CMS or REST API response, so the static MVP data can be swapped for a real data source later without touching any component. A matching Zod schema (`propertySchema`) validates every record at module load, ensuring that structural errors are caught before they reach the UI.
+
+---
+
+## Union types
+
+Three union types constrain the enumerable fields of `Property`.
+
+### `PropertyOperationType`
+
+```ts
+export type PropertyOperationType = 'sale' | 'rent'
+```
+
+| Value | Meaning |
+|-------|---------|
+| `'sale'` | Property is listed for purchase |
+| `'rent'` | Property is listed for rental |
+
+### `PropertyType`
+
+```ts
+export type PropertyType =
+  | 'house'
+  | 'apartment'
+  | 'land'
+  | 'commercial'
+  | 'office'
+```
+
+| Value | Meaning |
+|-------|---------|
+| `'house'` | Detached or semi-detached residential home |
+| `'apartment'` | Unit within a multi-unit building |
+| `'land'` | Bare land or lot without a structure |
+| `'commercial'` | Retail, warehouse, or mixed-use commercial space |
+| `'office'` | Dedicated office space |
+
+### `PropertyStatus`
+
+```ts
+export type PropertyStatus =
+  | 'available'
+  | 'sold'
+  | 'rented'
+  | 'reserved'
+  | 'hidden'
+```
+
+| Value | Meaning |
+|-------|---------|
+| `'available'` | Actively listed and visible to the public |
+| `'sold'` | Sale completed; excluded from active listings but still visible |
+| `'rented'` | Rental occupied; excluded from active listings but still visible |
+| `'reserved'` | Under offer or contract; still shown as related listings |
+| `'hidden'` | Completely excluded from all public views — `getAll`, `filter`, and the sitemap |
+
+<Warning>
+  Properties with `status: 'hidden'` are filtered out in `propertiesService.getAll()` before any other logic runs. They will never appear in search results, featured sections, related listings, or the XML sitemap. Use `'hidden'` to soft-delete a record or temporarily suppress a listing without removing it from the data file.
+</Warning>
+
+---
+
+## `PropertyCoordinates` interface
+
+Used by the optional `coordinates` field on `Property` to pin a listing on a map.
+
+<ParamField body="lat" type="number" required>
+  Latitude in decimal degrees. Positive values are north of the equator; negative values are south.
+</ParamField>
+
+<ParamField body="lng" type="number" required>
+  Longitude in decimal degrees. Positive values are east of the prime meridian; negative values are west.
+</ParamField>
+
+---
+
+## `Property` interface
+
+<ParamField body="id" type="string" required>
+  Unique listing identifier. Must be a non-empty string. Used as a stable sort tiebreaker by `propertiesService` — every sort branch calls `a.id.localeCompare(b.id)` to guarantee deterministic order across SSR and CSR.
+</ParamField>
+
+<ParamField body="title" type="string" required>
+  Human-readable listing title shown on cards and the detail page heading. Agency content — not an i18n key.
+</ParamField>
+
+<ParamField body="slug" type="string" required>
+  URL-safe identifier used in the `href` of the detail route: `/properties/[slug]`. Must be unique across the catalog. The detail page does a `propertiesService.getBySlug(slug)` lookup and returns a 404 if the property is hidden or missing.
+</ParamField>
+
+<ParamField body="description" type="string" required>
+  Full marketing description rendered on the property detail page. Supports plain text; markdown rendering depends on the component consuming the field.
+</ParamField>
+
+<ParamField body="operationType" type="PropertyOperationType" required>
+  Whether the listing is for `'sale'` or `'rent'`. Maps directly to the `?operation=` query parameter on the `/properties` listing page.
+</ParamField>
+
+<ParamField body="propertyType" type="PropertyType" required>
+  Category of the property. Maps directly to the `?type=` query parameter on the `/properties` listing page.
+</ParamField>
+
+<ParamField body="price" type="number" required>
+  Listing price in the currency specified by `currency`. Must be a non-negative number (Zod enforces `z.number().nonnegative()`). Formatted at render time by the `currency-format.ts` utility using the agency's ISO 4217 `currency` code.
+</ParamField>
+
+<ParamField body="currency" type="string" required>
+  ISO 4217 currency code for this specific listing (e.g. `'USD'`, `'MXN'`). Falls back to the agency `currency` when components need a display currency and this field is unavailable.
+</ParamField>
+
+<ParamField body="location" type="string" required>
+  Human-readable neighborhood or area name (e.g. `'Polanco'`, `'Downtown'`). Included in the accent-insensitive substring search performed by `propertiesService.filter` against the `?location=` query param.
+</ParamField>
+
+<ParamField body="city" type="string" required>
+  City where the property is located. Also included in the accent-insensitive location search. Used by `getRelated` to score a +2 bonus for same-city matches.
+</ParamField>
+
+<ParamField body="state" type="string" required>
+  State or province. Included in location search.
+</ParamField>
+
+<ParamField body="country" type="string" required>
+  Country. Included in location search. Used by `getRelated` to score a +1 bonus for same-country matches when city did not already match.
+</ParamField>
+
+<ParamField body="bedrooms" type="number">
+  Number of bedrooms. Optional. Zod validates as `z.number().int().nonnegative()` when present.
+</ParamField>
+
+<ParamField body="bathrooms" type="number">
+  Number of bathrooms. Optional. Zod validates as `z.number().nonnegative()` when present (allows half-baths such as `1.5`).
+</ParamField>
+
+<ParamField body="parkingSpaces" type="number">
+  Number of dedicated parking spaces. Optional. Zod validates as `z.number().int().nonnegative()` when present.
+</ParamField>
+
+<ParamField body="sizeUnit" type="'metric' | 'imperial'">
+  Unit for `constructionSize` and `landSize`. When omitted, components fall back to the agency `measurementUnit`. The number is rendered **as-is** in the declared unit — the template performs **no automatic m² ↔ ft² conversion**. Set this per record when an agency mixes units in the same catalog.
+</ParamField>
+
+<ParamField body="constructionSize" type="number">
+  Built floor area, expressed in `sizeUnit`. Optional. Zod validates as `z.number().nonnegative()` when present.
+</ParamField>
+
+<ParamField body="landSize" type="number">
+  Total lot/land area, expressed in `sizeUnit`. Optional. Zod validates as `z.number().nonnegative()` when present.
+</ParamField>
+
+<ParamField body="images" type="string[]" required>
+  Array of image paths served from `public/`. All items must be non-empty strings (Zod enforces `z.array(z.string().min(1))`). The first item is typically the same as `coverImage`.
+</ParamField>
+
+<ParamField body="coverImage" type="string" required>
+  Primary image path used as the LCP candidate on the detail page and the card thumbnail. Zod enforces `z.string().min(1)` — an empty string would produce a broken `<img>` before any consumer code could catch it.
+</ParamField>
+
+<ParamField body="amenities" type="string[]" required>
+  List of amenity labels (e.g. `['Pool', 'Gym', 'Rooftop terrace']`). Agency content strings, not i18n keys. All items must be non-empty strings.
+</ParamField>
+
+<ParamField body="developmentId" type="string">
+  Optional reference to a `Development.id`. Links the property to its parent development project. `getRelated` awards a +2 score bonus to sibling units sharing the same `developmentId`.
+</ParamField>
+
+<ParamField body="agentId" type="string">
+  Optional reference to an `Agent.id`. Associates the listing with a specific team member. `getRelated` awards a +1 score bonus when both properties share the same agent.
+</ParamField>
+
+<ParamField body="coordinates" type="PropertyCoordinates">
+  Optional `{ lat, lng }` pair for map rendering. See [`PropertyCoordinates`](#propertycoordinates-interface) above.
+</ParamField>
+
+<ParamField body="status" type="PropertyStatus" required>
+  Current listing status. See [`PropertyStatus`](#propertystatus) above for visibility rules.
+</ParamField>
+
+<ParamField body="featured" type="boolean" required>
+  When `true`, the property is surfaced in homepage showcases via `propertiesService.getFeatured()` and ranked first in the default `'featured'` sort order on the listing page.
+</ParamField>
+
+---
+
+## Zod schema
+
+The file `app/features/properties/schemas/property.schema.ts` provides a runtime mirror of the `Property` interface. The hand-written interface remains the canonical TypeScript type; the schema is the runtime boundary that validates external data (static MVP data today, a CMS or API response later) before it reaches services and components.
+
+### `propertySchema`
+
+Validates a single property record. Key Zod rules beyond type checking:
+
+- `id`, `title`, `slug`, `description`, `currency`, `location`, `city`, `state`, `country`, `coverImage` — `.min(1)` (non-empty string)
+- `price`, `constructionSize`, `landSize` — `.nonnegative()`
+- `bedrooms`, `parkingSpaces` — `.int().nonnegative()`
+- `bathrooms` — `.nonnegative()` (allows fractional values)
+- `images`, `amenities` — `z.array(z.string().min(1))`
+- `operationType`, `propertyType`, `status`, `sizeUnit` — `z.enum([...])` matching their TypeScript unions
+
+```ts
+import { z } from 'zod'
+
+export const propertySchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  slug: z.string().min(1),
+  description: z.string().min(1),
+  operationType: propertyOperationTypeSchema,
+  propertyType: propertyTypeSchema,
+  price: z.number().nonnegative(),
+  currency: z.string().min(1),
+  location: z.string().min(1),
+  city: z.string().min(1),
+  state: z.string().min(1),
+  country: z.string().min(1),
+  bedrooms: z.number().int().nonnegative().optional(),
+  bathrooms: z.number().nonnegative().optional(),
+  parkingSpaces: z.number().int().nonnegative().optional(),
+  sizeUnit: propertySizeUnitSchema.optional(),
+  constructionSize: z.number().nonnegative().optional(),
+  landSize: z.number().nonnegative().optional(),
+  images: z.array(z.string().min(1)),
+  coverImage: z.string().min(1),
+  amenities: z.array(z.string().min(1)),
+  developmentId: z.string().optional(),
+  agentId: z.string().optional(),
+  coordinates: propertyCoordinatesSchema.optional(),
+  status: propertyStatusSchema,
+  featured: z.boolean(),
+})
+```
+
+### `propertyListSchema`
+
+Validates the full data array. Defined as `z.array(propertySchema)`. Parsed at module load in `app/features/properties/data/properties.ts` — **any invalid record causes a `ZodError` and prevents the application from booting**. Fix the offending record in the data file to resolve it.
+
+```ts
+export const propertyListSchema = z.array(propertySchema)
+```
+
+A compile-time guard keeps the inferred schema type and the hand-written interface structurally identical:
+
+```ts
+type PropertyInput = z.infer<typeof propertySchema>
+
+const _typeCheck: PropertyInput extends Property
+  ? Property extends PropertyInput
+    ? true
+    : never
+  : never = true
+```
+
+If `property.types.ts` and `property.schema.ts` drift, this guard fails to compile before any test or runtime check runs.
+
+---
+
+## `PropertySort` type and `isPropertySort` guard
+
+Defined in `app/features/properties/services/properties.service.ts` alongside `PropertyFilters`.
+
+```ts
+export type PropertySort = 'featured' | 'price-asc' | 'price-desc'
+```
+
+| Value | Sort order |
+|-------|-----------|
+| `'featured'` (default) | `featured: true` first, then `id` ascending for ties |
+| `'price-asc'` | `price` ascending, then `id` ascending for ties |
+| `'price-desc'` | `price` descending, then `id` ascending for ties |
+
+Every sort uses `id.localeCompare(otherId)` as a tiebreaker — equal-scoring or equal-priced properties always render in the same order across SSR and CSR, preventing hydration mismatches.
+
+### `isPropertySort` type guard
+
+```ts
+export function isPropertySort(value: unknown): value is PropertySort {
+  return typeof value === 'string' && (VALID_SORTS as readonly string[]).includes(value)
+}
+```
+
+Use this guard in pages to coerce a raw `route.query.sort` value (which is `string | string[] | null | undefined`) into a safe `PropertySort` before passing it to `propertiesService.filter`. Unknown sort values are coerced to `'featured'`.
+
+---
+
+## `PropertyFilters` interface
+
+```ts
+export interface PropertyFilters {
+  operation?: string
+  type?: string
+  location?: string
+}
+```
+
+<ParamField body="operation" type="string">
+  Matches `Property.operationType` with a case-insensitive exact comparison. Pass `'sale'` or `'rent'`. Undefined means no filter on this criterion.
+</ParamField>
+
+<ParamField body="type" type="string">
+  Matches `Property.propertyType` with a case-insensitive exact comparison. Pass any `PropertyType` value. Undefined means no filter on this criterion.
+</ParamField>
+
+<ParamField body="location" type="string">
+  Free-text substring match against `location + city + state + country` joined with spaces. The search is **case-insensitive and accent-insensitive** (Unicode NFD decomposition + combining-mark strip — no external dependency). This means `'Mexico'` matches `'México'`, `'Queretaro'` matches `'Querétaro'`, and `'Leon'` matches `'Nuevo León'`. Undefined means no filter on this criterion.
+</ParamField>

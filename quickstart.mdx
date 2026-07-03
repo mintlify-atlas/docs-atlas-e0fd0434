@@ -1,47 +1,169 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Get started with Real Estate Template"
+sidebarTitle: "Quickstart"
+description: "Clone the Real Estate Template, install dependencies with pnpm, and have a live local preview running at localhost:3000 in under five minutes."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
-
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
+Getting a local preview of the Real Estate Template takes less than five minutes. The project uses `pnpm` as its package manager and ships a `postinstall` script that runs `nuxt prepare` automatically, so after a single install command the TypeScript types and Nuxt auto-imports are fully generated and your editor's IntelliSense is ready to go.
 
 ## Prerequisites
 
-Before you begin, you must have:
+Before you begin, make sure you have the following installed on your machine:
 
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
+- **Node.js 18 or later** — Nuxt 4 requires Node 18+. Check with `node -v`.
+- **pnpm** — Install with `npm install -g pnpm` if you don't have it. Check with `pnpm -v`.
+- **Git** — For cloning the repository.
 
-## Get started
+## Setup
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
+  ### Clone the repository
 
-    ```bash
-    npm install your-package
-    ```
-  </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
+  Clone the template to your local machine and move into the project directory.
 
-    ```bash
-    your-cli init
-    ```
-  </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
+  ```bash
+  git clone https://github.com/Ozcaar/real-estate-template.git my-agency-site
+  cd my-agency-site
+  ```
 
-    ```bash
-    your-cli start
-    ```
-  </Step>
+  ### Install dependencies
+
+  Install all dependencies with `pnpm`. The `postinstall` hook runs `nuxt prepare` automatically, so you do not need to run it separately.
+
+  ```bash
+  pnpm install
+  ```
+
+  <Note>
+    `nuxt prepare` generates the `.nuxt/` directory, which contains TypeScript type declarations for auto-imported composables, components, and Nuxt's runtime internals. Your IDE will not have accurate IntelliSense until this step completes.
+  </Note>
+
+  ### Start the development server
+
+  Start the Nuxt development server. It will be available at `http://localhost:3000`.
+
+  ```bash
+  pnpm dev
+  ```
+
+  Open your browser and navigate to `http://localhost:3000`. You should see the landing page with the default agency branding — "Real Estate Agency" — and sample property, development, and agent data already populated.
+
+  ### Customize for your agency
+
+  All agency-specific settings live in a single file: `app/config/agencies/default.agency.ts`. Open it and replace the placeholder values with your agency's real information. No component editing is required.
+
+  ```typescript
+  // app/config/agencies/default.agency.ts
+  import type { AgencyConfig } from '~/types/agency.types'
+
+  export const defaultAgencyConfig: AgencyConfig = {
+    id: 'default',
+    name: 'Real Estate Agency',
+    slogan: 'Find your ideal property',
+    logo: '/images/logo.svg',
+    favicon: '/favicon.ico',
+
+    // Reference a theme by ID — must match a file in app/themes/
+    theme: 'default',
+
+    defaultLocale: 'en',
+    availableLocales: ['en', 'es'],
+
+    currency: 'USD',
+    measurementUnit: 'metric',
+
+    contact: {
+      phone: '1-800-555-1234',
+      whatsapp: '1-800-555-1234',
+      email: 'example@email.com',
+      address: '123 Main Street, Anytown, USA',
+      businessHours: 'Mon-Fri 9am-5pm',
+    },
+
+    social: {
+      facebook: 'http://www.facebook.com/youragency',
+      instagram: 'http://www.instagram.com/youragency',
+      linkedin: 'http://www.linkedin.com/youragency',
+      tiktok: 'http://www.tiktok.com/youragency',
+      youtube: 'http://www.youtube.com/youragency',
+    },
+
+    // Toggle entire site sections on/off — no component edits needed
+    modules: {
+      properties: true,
+      developments: true,
+      agents: true,
+      blog: false,
+      testimonials: true,
+      contact: true,
+    },
+  }
+  ```
+
+  <Tip>
+    To rebrand the site for a different agency without losing the default config, create a new file (e.g., `app/config/agencies/acme.agency.ts`), copy the shape above, fill in the new values, and update the import in `app/config/site.config.ts` to point at the new file. The active agency is resolved from that single import — no other file needs to change.
+  </Tip>
+
+  ### Configure the site URL (for production SEO)
+
+  The template reads the base URL for canonical links, Open Graph URLs, and absolute sitemap entries from an environment variable. Create a `.env` file at the project root:
+
+  ```bash
+  NUXT_PUBLIC_SITE_URL=https://youragency.com
+  ```
+
+  This variable is optional for local development — the app builds and runs without it — but it must be set before a production deployment to ensure correct SEO metadata.
 </Steps>
 
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
+## Building for Production
 
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
-</Tip>
+The template supports both server-side rendering and full static export.
+
+<Tabs>
+  <Tab title="SSR / Node build">
+    Run a standard Nuxt production build. This outputs a Node.js server bundle to `.output/server/`.
+
+    ```bash
+    pnpm build
+    ```
+
+    Preview the built output locally with:
+
+    ```bash
+    pnpm preview
+    ```
+  </Tab>
+  <Tab title="Static export">
+    Generate a fully static site. Nuxt will crawl all pages and pre-render them to `.output/public/`. The server routes `sitemap.xml` and `robots.txt` are also pre-rendered automatically.
+
+    ```bash
+    pnpm generate
+    ```
+
+    <Warning>
+      Run `pnpm generate` with `NUXT_PUBLIC_SITE_URL` set so the sitemap emits absolute URLs. Without it, the sitemap route returns a deliberate 503 and the build will still pass (configured via `nitro.prerender.failOnError: false`), but the generated `sitemap.xml` will not be valid.
+    </Warning>
+  </Tab>
+</Tabs>
+
+## Available Scripts
+
+Every script in `package.json` is listed below for reference.
+
+| Script | Command | Description |
+|---|---|---|
+| `dev` | `nuxt dev` | Start the hot-reloading development server on `localhost:3000` |
+| `build` | `nuxt build` | Compile a production server-side rendering bundle |
+| `generate` | `nuxt generate` | Pre-render the full site as static HTML |
+| `preview` | `nuxt preview` | Serve the production build locally for final checks |
+| `lint` | `eslint .` | Run ESLint across the whole project |
+| `lint:fix` | `eslint . --fix` | Run ESLint and auto-fix all fixable violations |
+
+<CardGroup cols={2}>
+  <Card title="Project Structure" icon="folder-tree" href="/project-structure">
+    Learn where everything lives — features, config, themes, i18n, and server routes.
+  </Card>
+  <Card title="Introduction" icon="book-open" href="/introduction">
+    Read the full overview of the template's architecture and feature set.
+  </Card>
+</CardGroup>

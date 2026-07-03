@@ -1,0 +1,85 @@
+---
+title: "Real Estate Template: Modular Nuxt 4 Agency Starter"
+sidebarTitle: "Introduction"
+description: "Real Estate Template is a white-label Nuxt 4 starter for building real estate websites. One config file controls branding, modules, and i18n for any agency."
+---
+
+Real Estate Template is a production-ready, white-label website starter designed for developers who build real estate websites for multiple agencies. The entire identity of the site — name, logo, color palette, contact details, social links, enabled modules, and supported locales — is declared in a single TypeScript configuration file. Swap that file, and the site is fully rebranded for a new agency without touching a single component. No search-and-replace, no feature flags scattered across templates, no forked component trees to maintain.
+
+## Who it is for
+
+This template is aimed at freelancers, agencies, and in-house teams that deliver white-label real estate websites at scale. If you regularly build property-catalog sites for real estate brokers and need a solid, opinionated starting point that handles theming, i18n, SEO, and module toggling out of the box, this template is for you.
+
+## Tech Stack
+
+Every dependency was chosen to minimize boilerplate and maximize composability. The table below lists what ships in `package.json`.
+
+| Layer | Package | Version |
+|---|---|---|
+| Meta-framework | Nuxt | ^4 |
+| UI framework | Vue | ^3.5 |
+| Language | TypeScript | ^5.7 |
+| Styling | Tailwind CSS v4 | `@tailwindcss/vite ^4` |
+| State management | Pinia + `@pinia/nuxt` | ^0.11 |
+| Validation | Zod | ^4 |
+| Internationalisation | `@nuxtjs/i18n` | ^10 |
+| Sliders / carousels | Swiper | ^12 |
+| Utilities | VueUse + `@vueuse/nuxt` | ^13 |
+| Image optimisation | `@nuxt/image` | ^1 |
+| Icon system | `@nuxt/icon` | ^2 |
+
+## Core Value Proposition
+
+The template's central idea is **agency config-driven rendering**. Every runtime decision that differs between agencies — the site name shown in the header, the favicon, the primary brand colour, the WhatsApp number in property cards, which navigation sections are visible — is resolved from `app/config/agencies/default.agency.ts`. The agency config is validated at module load time with Zod so broken configs fail loud during development, not silently in production.
+
+Themes work the same way: a theme object in `app/themes/` declares color tokens, font stacks, radius scales, shadows, and layout widths. At runtime, `nuxt prepare` and a client plugin serialize those values to CSS custom properties such as `var(--color-primary)` and `var(--radius-md)`, making every component theme-aware without a single `if` branch.
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Property Catalog" icon="building">
+    Browse and filter a full property listing page backed by typed static data. Properties carry slug-based detail pages with image galleries and contact forms.
+  </Card>
+  <Card title="Developments" icon="city">
+    A dedicated developments section for residential areas, neighborhoods, and new construction projects with their own listing and detail flows.
+  </Card>
+  <Card title="Agent Profiles" icon="user-tie">
+    An agents listing page powered by the `agents` feature module. The entire section can be toggled off from the agency config `modules` map.
+  </Card>
+  <Card title="Multilingual (i18n)" icon="language">
+    English and Spanish ship out of the box via `@nuxtjs/i18n`. All visible text uses i18n keys — no raw strings in templates. Browser language detection with cookie persistence is configured by default.
+  </Card>
+  <Card title="Design Token Theming" icon="palette">
+    Every color, font, radius, shadow, and spacing value lives in a `ThemeConfig` object serialized to CSS variables. Create a new theme file, reference it by ID in the agency config, and every component repaints.
+  </Card>
+  <Card title="SEO & JSON-LD" icon="magnifying-glass">
+    `usePageSeo()` and `useJsonLd()` composables in `app/core/` set canonical URLs, Open Graph tags, Twitter cards, and structured data. The `NUXT_PUBLIC_SITE_URL` env variable drives absolute URL generation.
+  </Card>
+  <Card title="Module Toggles" icon="toggle-on">
+    The `modules` map in the agency config (`properties`, `developments`, `agents`, `blog`, `testimonials`, `contact`) gates both navigation items and page sections — disable a module and it disappears from the nav and the homepage automatically.
+  </Card>
+  <Card title="Server SEO Routes" icon="sitemap">
+    `server/routes/sitemap.xml.ts` and `server/routes/robots.txt.ts` are prerendered during `pnpm generate`, writing crawlable SEO infrastructure into `.output/public/` with no extra configuration.
+  </Card>
+</CardGroup>
+
+## Architecture in Brief
+
+The project follows a **feature-first architecture**. Business modules live under `app/features/*` and each owns its own `components/`, `composables/`, `services/`, `stores/`, `types/`, `schemas/`, `data/`, and `utils/`. Shared infrastructure — generic UI primitives in `components/ui/`, layout shells in `components/layout/`, cross-feature components in `components/shared/`, and business-agnostic utilities in `core/` — lives outside features so it can be consumed freely without circular dependencies.
+
+Pages are intentionally thin: they load data, set SEO metadata, and compose feature components. Complex business logic belongs in services and composables, not in `<script setup>` blocks.
+
+<Note>
+  The template uses the **Nuxt 4 `app/` directory convention**. All application source code lives under `app/` rather than at the project root. If you are used to Nuxt 3's flat layout, see the [Project Structure](/project-structure) page for a full walkthrough.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Clone the repo, install dependencies, and get a live local preview running in under five minutes.
+  </Card>
+  <Card title="Project Structure" icon="folder-tree" href="/project-structure">
+    A guided tour of the folder layout covering features, config, themes, i18n, and server routes.
+  </Card>
+</CardGroup>

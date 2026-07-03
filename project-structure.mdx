@@ -1,0 +1,325 @@
+---
+title: "Project structure and directory layout explained"
+sidebarTitle: "Project Structure"
+description: "A guided walkthrough of the Real Estate Template folder layout, covering the app/ directory, feature modules, config, themes, i18n, and server routes."
+---
+
+Understanding the directory layout is the fastest way to become productive with the Real Estate Template. The project follows a **feature-first architecture** — business modules own all of their own files — with a clear boundary between business-specific code inside `app/features/` and infrastructure-level code in `app/components/`, `app/core/`, and `app/config/`. This page walks through every folder you will work with as a developer.
+
+<Note>
+  This project uses the **Nuxt 4 `app/` directory convention**. All application source code lives under `app/` rather than at the repository root. Files that Nuxt expects at the root in older projects — `pages/`, `components/`, `composables/`, `stores/`, etc. — are found here under `app/`. Files outside `app/` (`i18n/`, `server/`, `public/`, `nuxt.config.ts`) follow the standard Nuxt root convention and are not moved.
+</Note>
+
+## Repository Root
+
+```txt
+real-estate-template/
+├── app/                  # All Nuxt application source (Nuxt 4 convention)
+├── i18n/
+│   └── locales/
+│       ├── en.json       # English translation strings
+│       └── es.json       # Spanish translation strings
+├── server/
+│   └── routes/
+│       ├── sitemap.xml.ts
+│       └── robots.txt.ts
+├── public/
+│   └── images/
+│       ├── agents/
+│       ├── developments/
+│       ├── home/
+│       ├── locations/
+│       └── properties/
+├── nuxt.config.ts
+└── package.json
+```
+
+Everything your users never see at runtime (`i18n/`, `server/`, `nuxt.config.ts`) lives at the root alongside the `app/` source tree.
+
+## The `app/` Directory
+
+```txt
+app/
+├── assets/
+│   └── css/
+│       └── main.css      # Tailwind CSS v4 entry point
+├── components/
+│   ├── ui/               # Base* primitives
+│   ├── layout/           # App* shells
+│   └── shared/           # Cross-feature components
+├── composables/          # Global Nuxt composables
+├── config/
+│   ├── agencies/
+│   │   ├── default.agency.ts
+│   │   └── agency.schema.ts
+│   ├── site.config.ts
+│   ├── navigation.ts
+│   ├── seo.ts
+│   └── i18n.ts
+├── core/
+│   ├── composables/
+│   │   ├── useJsonLd.ts
+│   │   └── usePageSeo.ts
+│   ├── services/
+│   ├── types/
+│   └── utils/
+│       ├── currency-format.ts
+│       ├── theme-to-css-vars.ts
+│       └── whatsapp-link.ts
+├── features/
+│   ├── home/
+│   ├── properties/
+│   ├── developments/
+│   ├── agents/
+│   ├── leads/
+│   ├── search/
+│   └── shared/
+├── layouts/              # Nuxt layout files
+├── lib/                  # Third-party library adapters
+├── middleware/           # Nuxt route middleware
+├── pages/                # File-based routes
+├── plugins/              # Nuxt plugins (e.g. theme.ts)
+├── stores/               # Global Pinia stores
+├── themes/
+│   ├── default.theme.ts
+│   └── index.ts
+├── types/                # Global TypeScript types
+└── utils/                # Global utility functions
+```
+
+## `app/components/`
+
+The `components/` directory is divided into three sub-folders, each with its own naming convention and scope. All three are registered without a path prefix in `nuxt.config.ts`, so components resolve by file name alone regardless of sub-folder.
+
+<Tabs>
+  <Tab title="ui/ — Base* primitives">
+    Generic, design-system-level components with no business awareness. Their names start with `Base`.
+
+    | File | Purpose |
+    |---|---|
+    | `BaseBadge.vue` | Status and category labels |
+    | `BaseButton.vue` | Primary, secondary, and ghost button variants |
+    | `BaseCard.vue` | Generic card container with surface styling |
+    | `BaseContainer.vue` | Max-width layout wrapper |
+    | `BaseHeading.vue` | Semantic heading with token-based sizing |
+    | `BaseIcon.vue` | Thin wrapper around `@nuxt/icon` |
+    | `BaseSection.vue` | Full-width section with token-based vertical spacing |
+  </Tab>
+  <Tab title="layout/ — App* shells">
+    Components that form the site frame. Their names start with `App`.
+
+    | File | Purpose |
+    |---|---|
+    | `AppHeader.vue` | Top-level site header |
+    | `AppNavbar.vue` | Desktop navigation bar |
+    | `AppMobileMenu.vue` | Mobile navigation drawer |
+    | `AppFooter.vue` | Site-wide footer |
+    | `AppLogo.vue` | Renders the agency logo from config |
+    | `AppLanguageSwitcher.vue` | Locale toggle using `@nuxtjs/i18n` |
+  </Tab>
+  <Tab title="shared/ — Cross-feature">
+    Components used by multiple features but carrying some business context. No naming prefix required.
+
+    | File | Purpose |
+    |---|---|
+    | `CtaBlock.vue` | Call-to-action section used on landing and detail pages |
+    | `CurrencyText.vue` | Formats a number using the agency's `currency` config |
+    | `FeatureItem.vue` | Icon + label row for feature/amenity lists |
+    | `ResponsiveImage.vue` | Wraps `@nuxt/image` with aspect-ratio and lazy-load defaults |
+    | `SectionHeader.vue` | Section title + subtitle combination |
+    | `SocialLinks.vue` | Renders social icons from the agency `social` config |
+  </Tab>
+</Tabs>
+
+<Note>
+  Because all three sub-folders are registered with `pathPrefix: false` in `nuxt.config.ts`, you use `<BaseButton>` not `<UiBaseButton>`, and `<AppHeader>` not `<LayoutAppHeader>`. The same rule applies to every `features/*/components/` folder.
+</Note>
+
+## `app/config/`
+
+The config layer is where agency identity is declared and validated.
+
+```txt
+app/config/
+├── agencies/
+│   ├── default.agency.ts   # Active agency shape — edit this to rebrand
+│   └── agency.schema.ts    # Zod schema; validates at module load time
+├── site.config.ts          # Imports the active agency + resolves the theme
+├── navigation.ts           # mainNavigation array with i18n keys and module guards
+├── seo.ts                  # Structural SEO defaults (OG image, Twitter card)
+└── i18n.ts                 # Locale code list shared with nuxt.config.ts
+```
+
+**`site.config.ts`** is the single import you change when deploying for a new agency. It imports an agency file, validates it through the Zod schema (warnings surfaced via `console.warn`), resolves the referenced theme from the themes registry, and re-exports a `siteConfig` object consumed by plugins and composables at runtime.
+
+**`navigation.ts`** declares the main nav items as i18n key + route + optional `module` field. Layout components read the active agency's `modules` map and hide any nav item whose `module` is disabled — no manual conditional rendering in templates needed.
+
+## `app/features/`
+
+Each feature is a self-contained business module. It owns every concern from data access to component rendering. The structure below shows the properties feature as the most complete example.
+
+```txt
+app/features/
+├── home/
+│   ├── components/        # HomeHero, HomeFeaturedProperties, HomeTestimonials…
+│   ├── data/              # locations.ts, stats.ts, testimonials.ts
+│   └── types/
+│
+├── properties/
+│   ├── components/        # PropertyCard, PropertyGallery, PropertyGrid
+│   ├── constants/         # property-types.ts
+│   ├── data/              # properties.ts (static mock data)
+│   ├── schemas/           # property.schema.ts (Zod)
+│   ├── services/          # properties.service.ts
+│   └── types/             # property.types.ts
+│
+├── developments/
+│   ├── components/        # DevelopmentCard
+│   ├── data/              # developments.ts
+│   └── types/
+│
+├── agents/
+│   ├── components/        # AgentCard
+│   ├── data/              # agents.ts
+│   └── types/
+│
+├── leads/                 # Placeholder — reserved for lead capture logic
+├── search/                # Placeholder — reserved for search/filter logic
+└── shared/                # Cross-feature components owned by no single module
+```
+
+<Tip>
+  Not every feature must use every sub-folder. Only create `schemas/`, `services/`, `stores/`, or `api/` folders when the feature actually needs them. The leads and search features ship as empty placeholders ready to be built out.
+</Tip>
+
+Every `features/*/components/` folder is auto-scanned by Nuxt and registered without a path prefix, so `<PropertyCard>` works anywhere in the app without an explicit import.
+
+## `app/themes/`
+
+Themes are plain TypeScript objects of type `ThemeConfig`. The `default.theme.ts` file declares the full token set: colors, font stacks, border-radius scale, shadow scale, and layout constants.
+
+```txt
+app/themes/
+├── default.theme.ts   # Full token set: colors, fonts, radius, shadow, layout
+└── index.ts           # Exports `themes` registry map and `resolveTheme(id)`
+```
+
+At runtime, `app/core/utils/theme-to-css-vars.ts` serializes the active theme object to CSS custom properties (e.g. `--color-primary`, `--radius-md`, `--shadow-lg`). A Nuxt plugin runs this on the client side so every Tailwind utility and component that references these variables reacts to a theme swap without a page reload.
+
+To add a new theme, create `app/themes/my-theme.theme.ts`, register it in `index.ts`, and set `theme: 'my-theme'` in the agency config.
+
+## `app/core/`
+
+The core layer holds infrastructure-level logic with no tie to any specific business feature.
+
+```txt
+app/core/
+├── composables/
+│   ├── usePageSeo.ts       # Sets useHead() + canonical + OG + Twitter tags
+│   └── useJsonLd.ts        # Injects JSON-LD structured data into <head>
+├── services/               # API client, storage adapters (future)
+├── types/                  # Shared infrastructure types
+└── utils/
+    ├── currency-format.ts  # Formats a number using Intl.NumberFormat
+    ├── theme-to-css-vars.ts # Serializes ThemeConfig → CSS variable object
+    └── whatsapp-link.ts    # Builds a wa.me deep-link from number + message
+```
+
+`usePageSeo()` and `useJsonLd()` are auto-imported from `app/core/composables/` (declared in `nuxt.config.ts` `imports.dirs`) and called from thin page components to set metadata without coupling pages to implementation details.
+
+## `app/pages/`
+
+Pages are thin: they call a composable to load data and set SEO, then compose feature components. The file-based routes in the MVP are:
+
+```txt
+app/pages/
+├── index.vue                # /
+├── properties/
+│   ├── index.vue            # /properties
+│   └── [slug].vue           # /properties/:slug
+├── developments/
+│   └── index.vue            # /developments
+├── agents/
+│   └── index.vue            # /agents
+├── about/
+│   └── index.vue            # /about
+└── contact/
+    └── index.vue            # /contact
+```
+
+<Note>
+  The `/developments/[slug]` detail page is planned for a future release (listed in the project spec) but is not yet implemented in the current file tree. Stub it at `app/pages/developments/[slug].vue` when you are ready to build it out.
+</Note>
+
+## `i18n/locales/`
+
+All user-visible text is stored as i18n keys, never as raw strings in templates. Two locale files ship with the template.
+
+```txt
+i18n/
+└── locales/
+    ├── en.json   # English — default locale
+    └── es.json   # Spanish — second locale
+```
+
+`@nuxtjs/i18n` is configured with the `no_prefix` strategy so URLs do not carry a locale segment (e.g. `/properties` rather than `/en/properties`). Language detection uses a cookie (`i18n_locale`) and redirects only on the root path.
+
+## `server/routes/`
+
+Two server routes handle SEO infrastructure and are prerendered to static files during `pnpm generate`.
+
+```txt
+server/
+└── routes/
+    ├── sitemap.xml.ts   # Dynamic sitemap; reads NUXT_PUBLIC_SITE_URL
+    └── robots.txt.ts    # robots.txt; blocks /admin by default
+```
+
+Both routes are listed in `nuxt.config.ts` under `nitro.prerender.routes` with `failOnError: false`. If `NUXT_PUBLIC_SITE_URL` is not set, the sitemap returns a 503 (deliberate degraded response) rather than crashing the build.
+
+## `public/images/`
+
+Static assets served directly by the web server (no processing by `@nuxt/image` at build time). The folder structure mirrors the domain model.
+
+```txt
+public/
+└── images/
+    ├── agents/        # Agent portrait photos
+    ├── developments/  # Development hero and gallery images
+    ├── home/          # Homepage hero and section assets
+    ├── locations/     # Location / neighbourhood photos
+    └── properties/    # Property listing and gallery photos
+```
+
+The agency logo is served from `public/images/logo.svg` (the path declared in the default agency config). Replace this file when rebranding without changing any config value.
+
+## Component Auto-Import Rules
+
+`nuxt.config.ts` registers four component directories, all with `pathPrefix: false`:
+
+```typescript
+components: [
+  { path: '~/components/ui',     pathPrefix: false },
+  { path: '~/components/layout', pathPrefix: false },
+  { path: '~/components/shared', pathPrefix: false },
+  { path: '~/features', pattern: '**/components/**', pathPrefix: false },
+],
+```
+
+This means:
+
+- `<BaseButton>` — resolves to `app/components/ui/BaseButton.vue`
+- `<AppHeader>` — resolves to `app/components/layout/AppHeader.vue`
+- `<SectionHeader>` — resolves to `app/components/shared/SectionHeader.vue`
+- `<PropertyCard>` — resolves to `app/features/properties/components/PropertyCard.vue`
+
+No explicit imports are needed in `<script setup>`. If two features define a component with the same name, Nuxt will warn — use distinct names to avoid conflicts.
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get a working local preview running in under five minutes.
+  </Card>
+  <Card title="Introduction" icon="book-open" href="/introduction">
+    Read the high-level overview of the template's architecture and goals.
+  </Card>
+</CardGroup>

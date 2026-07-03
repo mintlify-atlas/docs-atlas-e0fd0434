@@ -1,0 +1,166 @@
+---
+title: "Enable and disable features with module toggles"
+sidebarTitle: "Modules"
+description: "Control which sections appear on the site by flipping boolean flags in the agency config modules object. Navigation, footer, homepage sections, and sitemap all respond automatically."
+---
+
+The template is built to serve agencies with very different feature needs — a large multi-agent brokerage wants a full team directory, developments portfolio, and blog, while a solo agent might only need properties and a contact page. Rather than deleting components or routes for unwanted features, the template uses a `modules` object in the agency config that acts as a set of runtime flags. Layout components, the homepage, the footer, and the sitemap all read these flags and hide or show sections automatically, with no component editing required.
+
+## The `modules` object
+
+All six flags live in the `modules` key of `AgencyConfig`:
+
+```typescript app/config/agencies/default.agency.ts
+modules: {
+  properties: true,
+  developments: true,
+  agents: true,
+  blog: false,
+  testimonials: true,
+  contact: true,
+}
+```
+
+Every flag is a required boolean — the Zod schema enforces this, so you cannot accidentally omit a key or use a non-boolean value.
+
+## What each flag controls
+
+<Accordion title="properties">
+  Controls the property catalog feature.
+
+  | Location | Effect when `false` |
+  |---|---|
+  | Header navigation | `Properties` link is hidden |
+  | Mobile navigation | `Properties` link is hidden |
+  | Footer quick links | `Properties` link is hidden |
+  | Homepage featured section | Entire "Featured properties" section is hidden |
+  | Homepage search bar | Search form is hidden |
+  | Homepage categories section | "Browse by property type" section is hidden |
+  | `/sitemap.xml` | All individual property URLs are excluded |
+
+  The `/properties` route and all `/properties/[slug]` detail routes remain active. Disabling the module removes the entry points but does **not** 404 direct URL access.
+</Accordion>
+
+<Accordion title="developments">
+  Controls the residential developments portfolio.
+
+  | Location | Effect when `false` |
+  |---|---|
+  | Header navigation | `Developments` link is hidden |
+  | Mobile navigation | `Developments` link is hidden |
+  | Footer quick links | `Developments` link is hidden |
+  | Homepage developments section | Entire section is hidden |
+  | `/sitemap.xml` | `/developments` is excluded |
+
+  The `/developments` route stays accessible via direct URL.
+</Accordion>
+
+<Accordion title="agents">
+  Controls the team directory.
+
+  | Location | Effect when `false` |
+  |---|---|
+  | Header navigation | `Agents` link is hidden |
+  | Mobile navigation | `Agents` link is hidden |
+  | Footer quick links | `Agents` link is hidden |
+  | `/sitemap.xml` | `/agents` is excluded |
+
+  The `/agents` route stays accessible via direct URL.
+</Accordion>
+
+<Accordion title="blog">
+  Controls the blog feature. **Ships as `false` because the blog is not yet implemented.** Flip to `true` once a blog implementation is added.
+
+  | Location | Effect when `true` (once implemented) |
+  |---|---|
+  | Header navigation | `Blog` link appears |
+  | Footer quick links | `Blog` link appears |
+  | `/sitemap.xml` | Blog post URLs are included |
+</Accordion>
+
+<Accordion title="testimonials">
+  Controls the client testimonials section on the homepage.
+
+  | Location | Effect when `false` |
+  |---|---|
+  | Homepage testimonials section | Entire section is hidden, even if `homeTestimonials` data is populated |
+
+  There is no dedicated `/testimonials` route, so no sitemap or navigation impact beyond the homepage section.
+</Accordion>
+
+<Accordion title="contact">
+  Controls the contact page entry points.
+
+  | Location | Effect when `false` |
+  |---|---|
+  | Header navigation | `Contact` link is hidden |
+  | Mobile navigation | `Contact` link is hidden |
+  | Footer contact section | Contact methods are hidden |
+  | Homepage contact CTA section | Section is hidden |
+  | `/sitemap.xml` | `/contact` is excluded |
+
+  The `/contact` route stays accessible via direct URL.
+</Accordion>
+
+## Navigation filtering
+
+Navigation entries in `app/config/navigation.ts` carry an optional `module` field that links them to the flags above:
+
+```typescript app/config/navigation.ts
+export const mainNavigation: NavItem[] = [
+  { labelKey: 'nav.home',         to: '/' },
+  { labelKey: 'nav.properties',   to: '/properties',   module: 'properties' },
+  { labelKey: 'nav.developments', to: '/developments', module: 'developments' },
+  { labelKey: 'nav.agents',       to: '/agents',       module: 'agents' },
+  { labelKey: 'nav.about',        to: '/about' },
+  { labelKey: 'nav.contact',      to: '/contact',      module: 'contact' },
+]
+```
+
+The header and mobile menu components filter this array at render time: any entry whose `module` field points to a disabled flag is removed from the rendered list. Entries without a `module` field (home, about) are always shown. This means adding a new nav link requires only adding an entry to the `mainNavigation` array and setting the correct `module` key — no template logic changes.
+
+## Sitemap integration
+
+The `/sitemap.xml` Nitro server route reads the `agency.modules` flags and excludes disabled module pages automatically. It also calls `propertiesService.getAll()` to list individual property slugs, and skips that list entirely when `modules.properties` is `false`. Properties with `status: 'hidden'` are excluded regardless of the module flag.
+
+## Example: minimal single-agent site
+
+A solo agent who only lists properties and takes inquiries can strip the site down to its essentials by disabling `developments`, `agents`, `testimonials`, and `blog`:
+
+```typescript app/config/agencies/default.agency.ts
+modules: {
+  properties: true,
+  developments: false,  // No development portfolio
+  agents: false,        // No team directory (single-agent site)
+  blog: false,          // Not yet implemented
+  testimonials: false,  // Prefer an about page over a testimonials section
+  contact: true,
+}
+```
+
+With this config, the navigation collapses to: **Home / Properties / About / Contact**. The footer shows only the contact section and property links. The homepage shows the hero, search, featured properties, about band, and contact CTA — without developments, testimonials, or the team section.
+
+<Tip>
+  Even with `agents: false`, the `/agents` route is still reachable by direct URL. If you want to prevent access entirely, add a server middleware or page-level redirect. In most cases this is unnecessary — the route simply won't appear in search results or navigation, and search engines will find it only if an external link points to it.
+</Tip>
+
+## Example: properties-only showcase (no contact form)
+
+An agency that handles all inquiries through WhatsApp and wants to suppress the standalone contact page:
+
+```typescript
+modules: {
+  properties: true,
+  developments: true,
+  agents: true,
+  blog: false,
+  testimonials: true,
+  contact: false,       // Hide the /contact nav entry and CTA sections
+}
+```
+
+The homepage contact CTA section is hidden, and the `Contact` nav link disappears. Visitors can still reach out via the WhatsApp floating button, which reads from `agency.contact.whatsapp` and is rendered independently of the `contact` module flag.
+
+<Note>
+  The WhatsApp floating CTA and the contact methods embedded on property detail pages are driven by `agency.contact.*` fields, not by the `contact` module flag. Disabling the `contact` module hides the dedicated `/contact` page entry points, but in-page contact shortcuts remain visible.
+</Note>

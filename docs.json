@@ -1,72 +1,95 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mintlify Starter Kit",
+  "name": "Real Estate Template",
+  "theme": "willow",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
-  },
-  "favicon": "/favicon.svg",
-  "navigation": {
-    "pages": [
-      {
-        "group": "Getting Started",
-        "pages": [
-          "index",
-          "quickstart"
-        ]
-      }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
+    "primary": "#0F766E",
+    "light": "#F5F5F4",
+    "dark": "#111827"
   },
   "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
     "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://app.mintlify.com"
+      "type": "github",
+      "href": "https://github.com/Ozcaar/real-estate-template"
     }
-  },
-  "contextual": {
-    "options": [
-      "copy",
-      "view",
-      "chatgpt",
-      "claude",
-      "perplexity",
-      "mcp",
-      "cursor",
-      "vscode"
-    ]
   },
   "footer": {
     "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
+      "github": "https://github.com/Ozcaar/real-estate-template"
     }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Guide",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "project-structure"
+            ]
+          },
+          {
+            "group": "Customization",
+            "pages": [
+              "customization/agency-config",
+              "customization/theming",
+              "customization/data-and-content",
+              "customization/i18n",
+              "customization/modules"
+            ]
+          },
+          {
+            "group": "Architecture",
+            "pages": [
+              "architecture/overview",
+              "architecture/feature-modules",
+              "architecture/core-layer"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/build-and-deploy",
+              "deployment/seo-and-sitemaps",
+              "deployment/troubleshooting"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "groups": [
+          {
+            "group": "Components",
+            "pages": [
+              "reference/components/ui-components",
+              "reference/components/layout-components",
+              "reference/components/feature-components"
+            ]
+          },
+          {
+            "group": "Data Models",
+            "pages": [
+              "reference/models/property",
+              "reference/models/development",
+              "reference/models/agent",
+              "reference/models/agency-config",
+              "reference/models/theme-config"
+            ]
+          },
+          {
+            "group": "Services & Composables",
+            "pages": [
+              "reference/services/properties-service",
+              "reference/composables/use-site-config",
+              "reference/composables/use-page-seo"
+            ]
+          }
+        ]
+      }
+    ]
   }
 }

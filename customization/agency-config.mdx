@@ -1,0 +1,271 @@
+---
+title: "Configure your agency identity and settings"
+sidebarTitle: "Agency Config"
+description: "Edit a single TypeScript file to set your agency name, logo, contact details, currency, measurement unit, and enabled modules without changing any component."
+---
+
+Every piece of agency-specific identity — from the display name and logo path down to the WhatsApp number and which site modules are active — lives in one place: `app/config/agencies/default.agency.ts`. Components never hardcode any of these values. Instead they read the config through the `useSiteConfig()` composable, which returns the validated, fully-typed object that `site.config.ts` builds at module load. The result is a clean contract: rebrand the site by editing one file, and every layout, header, footer, SEO tag, and structured-data block updates automatically.
+
+## The single-file approach
+
+`site.config.ts` imports `defaultAgencyConfig`, runs it through `validateAgencyConfig()`, resolves the matching theme, and exports the combined `siteConfig` object. Every consumer calls `useSiteConfig()` — nothing is passed through props, environment variables, or hardcoded strings in templates.
+
+```typescript app/config/site.config.ts
+import { defaultAgencyConfig } from './agencies/default.agency'
+import { validateAgencyConfig } from './agencies/agency.schema'
+import { defaultI18nLocales } from '~/config/i18n'
+import { resolveTheme, themes } from '~/themes'
+
+const activeAgency = defaultAgencyConfig
+
+const { agency: validatedAgency, warnings } = validateAgencyConfig(activeAgency, {
+  themes,
+  i18nLocales: defaultI18nLocales,
+})
+
+for (const warning of warnings) {
+  console.warn(`[agency] ${warning}`)
+}
+
+export const siteConfig: SiteConfig = {
+  agency: validatedAgency,
+  theme: resolveTheme(validatedAgency.theme),
+}
+```
+
+## Single-agency vs. multi-agency setup
+
+<CardGroup cols={2}>
+  <Card title="Option A — Single agency" icon="building">
+    Edit `app/config/agencies/default.agency.ts` in place. This is the recommended path when the deployment serves exactly one agency and you never need to switch.
+  </Card>
+  <Card title="Option B — Multi-agency ready" icon="buildings">
+    Create a new file such as `acme.agency.ts`, then swap the import constant in `site.config.ts`. No component changes required.
+  </Card>
+</CardGroup>
+
+### Option B step-by-step
+
+<Steps>
+  <Step title="Create a new agency file">
+    Copy `default.agency.ts` and rename it after the agency:
+
+    ```typescript app/config/agencies/acme.agency.ts
+    import type { AgencyConfig } from '~/types/agency.types'
+
+    export const acmeAgencyConfig: AgencyConfig = {
+      id: 'acme',
+      name: 'Acme Real Estate',
+      slogan: 'The right property, every time',
+      logo: '/images/logo.svg',
+      favicon: '/favicon.ico',
+      theme: 'default',
+      defaultLocale: 'en',
+      availableLocales: ['en', 'es'],
+      currency: 'USD',
+      measurementUnit: 'imperial',
+      contact: {
+        phone: '1-800-555-9999',
+        whatsapp: '18005559999',
+        email: 'hello@acme-realestate.com',
+        address: '500 Commerce Blvd, Austin, TX 78701',
+        businessHours: 'Mon–Sat 8am–6pm',
+      },
+      social: {
+        facebook: 'https://www.facebook.com/acmerealestate',
+        instagram: 'https://www.instagram.com/acmerealestate',
+      },
+      modules: {
+        properties: true,
+        developments: false,
+        agents: true,
+        blog: false,
+        testimonials: true,
+        contact: true,
+      },
+    }
+    ```
+  </Step>
+  <Step title="Update the import in site.config.ts">
+    ```diff app/config/site.config.ts
+    - import { defaultAgencyConfig } from './agencies/default.agency'
+    + import { acmeAgencyConfig } from './agencies/acme.agency'
+
+    - const activeAgency = defaultAgencyConfig
+    + const activeAgency = acmeAgencyConfig
+    ```
+  </Step>
+  <Step title="Restart the dev server">
+    Run `pnpm dev`. The header, footer, contact page, SEO meta, and every other consumer will reflect the new agency immediately.
+  </Step>
+</Steps>
+
+## Complete field reference
+
+The full `defaultAgencyConfig` shipped with the template is shown below, followed by a detailed description of every field.
+
+```typescript app/config/agencies/default.agency.ts
+export const defaultAgencyConfig: AgencyConfig = {
+  id: 'default',
+  name: 'Real Estate Agency',
+  slogan: 'Find your ideal property',
+  logo: '/images/logo.svg',
+  favicon: '/favicon.ico',
+  theme: 'default',
+  defaultLocale: 'en',
+  availableLocales: ['en', 'es'],
+  currency: 'USD',
+  measurementUnit: 'metric',
+  contact: {
+    phone: '1-800-555-1234',
+    whatsapp: '1-800-555-1234',
+    email: 'example@email.com',
+    address: '123 Main Street, Anytown, USA',
+    businessHours: 'Mon-Fri 9am-5pm',
+  },
+  social: {
+    facebook: 'http://www.facebook.com/youragency',
+    instagram: 'http://www.instagram.com/youragency',
+    linkedin: 'http://www.linkedin.com/youragency',
+    tiktok: 'http://www.tiktok.com/youragency',
+    youtube: 'http://www.youtube.com/youragency',
+  },
+  modules: {
+    properties: true,
+    developments: true,
+    agents: true,
+    blog: false,
+    testimonials: true,
+    contact: true,
+  },
+}
+```
+
+### Identity fields
+
+<ParamField path="id" type="string" required>
+  Unique slug identifying this agency. Used internally and as the `data-agency` attribute. Must be a non-empty string.
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Agency display name. Appears in the header, footer, page titles, SEO meta, and JSON-LD structured data. Must contain at least one non-whitespace character.
+</ParamField>
+
+<ParamField path="slogan" type="string">
+  Short marketing slogan shown in the hero and footer tagline area. Optional — omit it to leave the space empty.
+</ParamField>
+
+<ParamField path="logo" type="string" required>
+  Public path to the agency logo image. **Must start with `/`** (file is served from the `public/` directory). Example: `/images/logo.svg`. The validator throws if the path does not begin with a forward slash.
+</ParamField>
+
+<ParamField path="favicon" type="string">
+  Public path to the favicon file. Must start with `/` if provided. Defaults to `/favicon.ico` when omitted.
+</ParamField>
+
+### Theme and locale fields
+
+<ParamField path="theme" type="string" required>
+  ID of the theme registered in `app/themes/index.ts`. The validator throws a `ZodError` when this ID is not found in the theme registry. See [Theming](/customization/theming) for how to create and register a new theme.
+</ParamField>
+
+<ParamField path="defaultLocale" type="string" required>
+  BCP 47 locale code used on first visit. Must be present in both `availableLocales` and the i18n locale list registered in `nuxt.config.ts`. Example: `'en'`.
+</ParamField>
+
+<ParamField path="availableLocales" type="string[]" required>
+  Array of locale codes the agency supports. Every code must be registered in the Nuxt i18n config. The `AppLanguageSwitcher` component builds its list from this array. Example: `['en', 'es']`.
+</ParamField>
+
+### Currency and measurement
+
+<ParamField path="currency" type="string" required>
+  [ISO 4217](https://en.wikipedia.org/wiki/ISO_4217) currency code used to format property prices throughout the site. Examples: `'USD'`, `'MXN'`, `'EUR'`, `'GBP'`. The validator emits a `console.warn` if the value is not exactly three uppercase letters but does **not** throw — allowing transitional codes.
+</ParamField>
+
+<ParamField path="measurementUnit" type='"metric" | "imperial"' required>
+  Unit system for property area display. `'metric'` renders areas as m²; `'imperial'` renders them as ft². Individual property records can override this with their own `sizeUnit` field — the template never auto-converts between units.
+</ParamField>
+
+### Contact object
+
+<ParamField path="contact.phone" type="string" required>
+  Primary phone number shown in the header, footer, and contact page. Include the country code for international dialing.
+</ParamField>
+
+<ParamField path="contact.whatsapp" type="string" required>
+  WhatsApp number for the floating CTA and contact page. The template strips non-digit characters automatically when building the `wa.me` deep link. Include the country code (e.g. `'15551234567'` or `'+1 555 123 4567'`).
+</ParamField>
+
+<ParamField path="contact.email" type="string" required>
+  Agency contact email. Shown on the contact page and used in JSON-LD structured data. The validator prints a warning if the value does not look like a valid email address.
+</ParamField>
+
+<ParamField path="contact.address" type="string" required>
+  Physical office address shown on the contact page and in structured data.
+</ParamField>
+
+<ParamField path="contact.businessHours" type="string">
+  Human-readable office hours string, e.g. `'Mon–Fri 9am–5pm'`. Optional; the contact page hides this field when it is omitted.
+</ParamField>
+
+### Social object
+
+All social fields are optional. The footer hides icons for any platform whose value is omitted or empty. Provide full HTTPS URLs for best SEO practice — the validator warns (but does not throw) for `http://` or `www.` prefixes.
+
+<ParamField path="social.facebook" type="string">Full Facebook page URL.</ParamField>
+<ParamField path="social.instagram" type="string">Full Instagram profile URL.</ParamField>
+<ParamField path="social.linkedin" type="string">Full LinkedIn company or profile URL.</ParamField>
+<ParamField path="social.tiktok" type="string">Full TikTok profile URL.</ParamField>
+<ParamField path="social.youtube" type="string">Full YouTube channel URL.</ParamField>
+
+### Modules object
+
+<ParamField path="modules.properties" type="boolean" required>
+  Enables the property catalog (`/properties`). When `false`, the nav entry, footer link, homepage featured section, and sitemap entries for properties are all hidden.
+</ParamField>
+
+<ParamField path="modules.developments" type="boolean" required>
+  Enables the developments portfolio (`/developments`). When `false`, the nav entry, footer link, and homepage developments section are hidden.
+</ParamField>
+
+<ParamField path="modules.agents" type="boolean" required>
+  Enables the team directory (`/agents`). When `false`, the nav entry and footer link are hidden.
+</ParamField>
+
+<ParamField path="modules.blog" type="boolean" required>
+  Enables the blog. Ships as `false` because the blog feature is not yet implemented — flip to `true` once an implementation is added.
+</ParamField>
+
+<ParamField path="modules.testimonials" type="boolean" required>
+  Enables the testimonials section on the homepage. When `false`, the section is hidden even if testimonial data is present.
+</ParamField>
+
+<ParamField path="modules.contact" type="boolean" required>
+  Enables the contact page (`/contact`) nav and footer link, and the homepage contact CTA section.
+</ParamField>
+
+## Validation at module load
+
+`validateAgencyConfig()` is called synchronously when `site.config.ts` is first imported — before the Nuxt app mounts. It runs two validation passes:
+
+**Structural checks (throw a `ZodError`):**
+- `id`, `name`, `logo`, and `theme` are non-empty strings
+- `logo` and `favicon` start with `/`
+- `measurementUnit` is exactly `'metric'` or `'imperial'`
+- `defaultLocale` is present in `availableLocales`
+- `defaultLocale` and every entry in `availableLocales` are registered in the Nuxt i18n locale list
+- `theme` is a key in the `themes` registry
+
+**Format warnings (printed via `console.warn`, never throw):**
+- `contact.email` does not look like a standard email address
+- `currency` is not a three-uppercase-letter ISO 4217 code
+- Any `social.*` URL does not start with `https://`, `http://`, or `www.`
+
+<Note>
+  The shipped `default.agency.ts` intentionally triggers **five `console.warn` messages** at startup — one for each social platform whose placeholder URL starts with `http://www.` instead of `https://`. These warnings are by design: they document exactly what a real agency needs to update when rebranding. You will see messages like `[agency] social.facebook "http://www.facebook.com/youragency" should start with "http://", "https://" or "www."` in the dev console until you replace the placeholder URLs with your real HTTPS social links.
+</Note>
+
+<Tip>
+  If the app fails to start with a `ZodError`, the error message lists every failing field and a clear description of what is wrong. The most common causes are: `theme` set to an ID not yet registered in `app/themes/index.ts`, `defaultLocale` not listed in `availableLocales`, or a `logo` path that does not start with `/`.
+</Tip>

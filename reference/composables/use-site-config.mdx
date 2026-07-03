@@ -1,0 +1,221 @@
+---
+title: "useSiteConfig(): access agency and theme at runtime"
+sidebarTitle: "useSiteConfig"
+description: "useSiteConfig() returns the active SiteConfig (agency identity + resolved ThemeConfig) via Nuxt useState, making it SSR-safe and reactive across all components."
+---
+
+`useSiteConfig()` is the single composable every component uses to read the active agency identity and its resolved theme tokens at runtime. It is backed by Nuxt's `useState` primitive, which means the value is serialized into the SSR payload and rehydrated on the client without an extra network round-trip — no flash of unstyled content, no mismatch between server and client renders. Components must **never** import `siteConfig` directly from `~/config/site.config`; always go through `useSiteConfig()` so a future multi-tenant loader can swap the active agency without changing any component.
+
+```ts
+import { useSiteConfig } from '~/composables/useSiteConfig'
+```
+
+---
+
+## Signature
+
+```ts
+function useSiteConfig(): Ref<SiteConfig>
+```
+
+<ResponseField name="returns" type="Ref<SiteConfig>">
+  A reactive `Ref` wrapping the active `SiteConfig`. The value is initialized from the static agency config on first call and shared across all components via the `'site-config'` state key.
+</ResponseField>
+
+---
+
+## `SiteConfig` Interface
+
+```ts
+export interface SiteConfig {
+  agency: AgencyConfig
+  theme: ThemeConfig
+}
+```
+
+<ResponseField name="agency" type="AgencyConfig">
+  Identity, contact details, social links, module toggles, locale settings, and currency for the active agency. See [`AgencyConfig`](#agencyconfig) below.
+</ResponseField>
+
+<ResponseField name="theme" type="ThemeConfig">
+  The resolved design-token set: color palette, font stacks, border-radius scale, shadow scale, and layout constraints. See [`ThemeConfig`](#themeconfig) below.
+</ResponseField>
+
+---
+
+## `AgencyConfig` Reference
+
+```ts
+export interface AgencyConfig {
+  id: string
+  name: string
+  slogan?: string
+  logo: string
+  favicon?: string
+  theme: string
+  defaultLocale: string
+  availableLocales: string[]
+  currency: string
+  measurementUnit: 'metric' | 'imperial'
+  contact: AgencyContactConfig
+  social: AgencySocialConfig
+  modules: AgencyModulesConfig
+}
+```
+
+### `AgencyContactConfig`
+
+```ts
+export interface AgencyContactConfig {
+  phone: string
+  whatsapp: string
+  email: string
+  address: string
+  businessHours?: string
+}
+```
+
+### `AgencySocialConfig`
+
+```ts
+export interface AgencySocialConfig {
+  facebook?: string
+  instagram?: string
+  linkedin?: string
+  tiktok?: string
+  youtube?: string
+}
+```
+
+### `AgencyModulesConfig`
+
+```ts
+export interface AgencyModulesConfig {
+  properties: boolean
+  developments: boolean
+  agents: boolean
+  blog: boolean
+  testimonials: boolean
+  contact: boolean
+}
+```
+
+Each boolean toggles an entire feature module. Pages and navigation items check `modules.*` to conditionally render their content — no code changes are needed to enable or disable a module across the whole site.
+
+---
+
+## `ThemeConfig` Reference
+
+```ts
+export interface ThemeConfig {
+  id: string
+  name: string
+  colors: ThemeColors
+  fonts: ThemeFonts
+  radius: ThemeRadius
+  shadow: ThemeShadow
+  layout: ThemeLayout
+}
+```
+
+At runtime the active theme's tokens are serialized into CSS custom properties (e.g. `--color-primary`, `--radius-md`) so every component can reference them via `var(--color-primary)` without coupling to any specific hex value.
+
+---
+
+## Basic Usage
+
+```ts
+const site = useSiteConfig()
+
+// Agency identity
+const agencyName = site.value.agency.name
+const logoPath = site.value.agency.logo
+
+// Contact channels
+const phone = site.value.agency.contact.phone
+const whatsapp = site.value.agency.contact.whatsapp
+const email = site.value.agency.contact.email
+
+// Module toggles
+const hasProperties = site.value.agency.modules.properties
+const hasAgents = site.value.agency.modules.agents
+
+// Theme colors
+const primaryColor = site.value.theme.colors.primary
+const surfaceColor = site.value.theme.colors.surface
+```
+
+---
+
+## Common Access Patterns
+
+| Expression | Type | Description |
+|---|---|---|
+| `site.value.agency.name` | `string` | Display name for the agency |
+| `site.value.agency.slogan` | `string \| undefined` | Optional marketing slogan |
+| `site.value.agency.logo` | `string` | Logo path, served from `public/` |
+| `site.value.agency.currency` | `string` | ISO 4217 currency code (e.g. `'USD'`, `'MXN'`) |
+| `site.value.agency.measurementUnit` | `'metric' \| 'imperial'` | Default area unit for the catalog |
+| `site.value.agency.contact.phone` | `string` | Agency phone number |
+| `site.value.agency.contact.whatsapp` | `string` | WhatsApp number (digits or formatted) |
+| `site.value.agency.contact.email` | `string` | Agency email address |
+| `site.value.agency.contact.address` | `string` | Physical address string |
+| `site.value.agency.social.instagram` | `string \| undefined` | Instagram URL, if configured |
+| `site.value.agency.modules.properties` | `boolean` | Whether the properties module is enabled |
+| `site.value.agency.modules.agents` | `boolean` | Whether the agents module is enabled |
+| `site.value.agency.defaultLocale` | `string` | Default locale code (e.g. `'en'`, `'es'`) |
+| `site.value.theme.colors.primary` | `string` | Brand primary hex color |
+| `site.value.theme.colors.background` | `string` | Page background color |
+| `site.value.theme.colors.surface` | `string` | Card/panel background color |
+| `site.value.theme.fonts.heading` | `string` | Heading font stack |
+| `site.value.theme.fonts.body` | `string` | Body font stack |
+
+---
+
+## Conditional Rendering with Module Toggles
+
+The `modules` object is the canonical way to gate UI sections. Check it in `<template>` to conditionally render navigation items and page sections:
+
+```vue
+<script setup lang="ts">
+import { computed } from 'vue'
+
+const site = useSiteConfig()
+const modules = computed(() => site.value.agency.modules)
+</script>
+
+<template>
+  <nav>
+    <NuxtLink to="/">Home</NuxtLink>
+    <NuxtLink v-if="modules.properties" to="/properties">Properties</NuxtLink>
+    <NuxtLink v-if="modules.agents" to="/agents">Agents</NuxtLink>
+    <NuxtLink v-if="modules.contact" to="/contact">Contact</NuxtLink>
+  </nav>
+</template>
+```
+
+---
+
+## SSR Safety and the `useState` Guarantee
+
+`useSiteConfig()` calls `useState<SiteConfig>('site-config', () => siteConfig)` internally. The `'site-config'` key is the shared state identifier: the first call during SSR initializes the state from the static agency config, and Nuxt serializes it into the HTML payload. When the client hydrates, `useState` reads the serialized value from the payload instead of re-running the factory function — so the initial value is identical on both sides and hydration never mismatches.
+
+<Warning>
+  **Do not import `siteConfig` directly from `~/config/site.config` in components or pages.** A future multi-tenant loader will replace the static factory with a server-side agency lookup (keyed to the request host). Components that bypass `useSiteConfig()` will not receive the dynamically resolved value and will break in multi-tenant mode.
+</Warning>
+
+---
+
+## i18n Integration
+
+`AgencyConfig` does not hold i18n-translated strings. Fields like `agency.name`, `agency.contact.address`, and `agency.social.*` are agency-owned content (not locale strings). Human-readable UI labels — page titles, section headings, button text — live in the locale files under `~/i18n/` and are accessed via `useI18n()`. Both composables are commonly used together:
+
+```ts
+const { t } = useI18n()
+const site = useSiteConfig()
+
+// Page title uses the i18n key interpolated with the agency name from config
+const seoTitle = computed(() =>
+  t('home.seo.title', { agencyName: site.value.agency.name })
+)
+```

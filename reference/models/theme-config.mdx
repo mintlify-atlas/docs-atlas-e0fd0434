@@ -1,0 +1,333 @@
+---
+title: "ThemeConfig interface and design token reference"
+sidebarTitle: "ThemeConfig"
+description: "ThemeConfig defines all visual design tokens: colors, fonts, radius, shadows, and layout. Tokens are serialized to CSS variables at runtime for component-level theming."
+---
+
+`ThemeConfig` is the single source of truth for every visual design token in the template. Color palettes, font stacks, border radii, box shadows, and layout dimensions are all defined as typed TypeScript objects — never hardcoded in component styles. At application startup the `theme.ts` plugin calls `themeToCssVars(theme)` from `app/core/utils/theme-to-css-vars.ts`, which serializes the active theme into a `:root {}` CSS rule injected during SSR. This guarantees that the correct brand tokens are present in the initial HTML with no flash of the wrong theme, and that every component can consume `var(--color-primary)`, `var(--radius-md)`, etc. with no code changes when the theme switches. The interface is defined in `app/types/theme.types.ts`.
+
+---
+
+## `ThemeConfig` interface
+
+<ParamField body="id" type="string" required>
+  Unique theme identifier. Referenced by `AgencyConfig.theme` to select the active theme. Also applied as the `data-theme` attribute value on the root element, enabling theme-scoped CSS selectors if needed.
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  Human-readable theme name displayed in developer tooling and theme-picker UIs (e.g. `'Default Theme'`, `'Luxury Dark'`).
+</ParamField>
+
+<ParamField body="colors" type="ThemeColors" required>
+  Full color palette. See [`ThemeColors`](#themecolors-interface) below.
+</ParamField>
+
+<ParamField body="fonts" type="ThemeFonts" required>
+  Font family stacks for headings, body text, and editorial/serif contexts. See [`ThemeFonts`](#themefonts-interface) below.
+</ParamField>
+
+<ParamField body="radius" type="ThemeRadius" required>
+  Border radius scale from small to pill-shaped. See [`ThemeRadius`](#themeradius-interface) below.
+</ParamField>
+
+<ParamField body="shadow" type="ThemeShadow" required>
+  Box shadow scale for three elevation levels. See [`ThemeShadow`](#themeshadow-interface) below.
+</ParamField>
+
+<ParamField body="layout" type="ThemeLayout" required>
+  Layout constraints for container width and section vertical spacing. See [`ThemeLayout`](#themelayout-interface) below.
+</ParamField>
+
+---
+
+## `ThemeColors` interface
+
+All 17 color fields accept any valid CSS color string (hex, `rgb()`, `hsl()`, etc.). Each maps to a CSS custom property on `:root` — see the [CSS variable mapping table](#css-variable-mapping) for the full correspondence.
+
+<ParamField body="background" type="string" required>
+  Page background color. Applied to the outermost layout surface. Default: `#FFFFFF`.
+</ParamField>
+
+<ParamField body="foreground" type="string" required>
+  Default text color rendered on top of `background`. Default: `#111827`.
+</ParamField>
+
+<ParamField body="surface" type="string" required>
+  Raised surface color for cards, panels, and modals that sit above the page background. Default: `#FFFFFF`.
+</ParamField>
+
+<ParamField body="surfaceMuted" type="string" required>
+  Subtle secondary surface for alternating section backgrounds, input fills, and quiet containers. Default: `#F5F5F4`.
+</ParamField>
+
+<ParamField body="primary" type="string" required>
+  Brand primary color. Used for primary buttons, active states, links, and key interactive elements. Default: `#0F766E`.
+</ParamField>
+
+<ParamField body="primaryForeground" type="string" required>
+  Readable text and icon color rendered on top of `primary`. Ensures accessible contrast on primary-colored backgrounds. Default: `#FFFFFF`.
+</ParamField>
+
+<ParamField body="secondary" type="string" required>
+  Brand secondary color. Used for secondary buttons and supporting UI elements. Default: `#F5F5F4`.
+</ParamField>
+
+<ParamField body="secondaryForeground" type="string" required>
+  Readable text and icon color rendered on top of `secondary`. Default: `#111827`.
+</ParamField>
+
+<ParamField body="accent" type="string" required>
+  Accent color for highlights, price tags, badges, and emphasis elements. Default: `#D97706`.
+</ParamField>
+
+<ParamField body="accentForeground" type="string" required>
+  Readable text and icon color rendered on top of `accent`. Default: `#FFFFFF`.
+</ParamField>
+
+<ParamField body="muted" type="string" required>
+  Muted text color for metadata, captions, placeholder text, and secondary labels. Default: `#6B7280`.
+</ParamField>
+
+<ParamField body="border" type="string" required>
+  Border and divider color for cards, inputs, separators, and table rows. Default: `#E5E7EB`.
+</ParamField>
+
+<ParamField body="card" type="string" required>
+  Card background color. Typically the same as `surface` but separated so card-specific overrides are possible. Default: `#FFFFFF`.
+</ParamField>
+
+<ParamField body="cardForeground" type="string" required>
+  Default text color on top of `card`. Default: `#111827`.
+</ParamField>
+
+<ParamField body="success" type="string" required>
+  Success state color for alerts, badges, and status indicators. Default: `#16A34A`.
+</ParamField>
+
+<ParamField body="warning" type="string" required>
+  Warning state color. Default: `#D97706` (same as `accent` in the default theme).
+</ParamField>
+
+<ParamField body="error" type="string" required>
+  Error and danger state color for validation messages and destructive action indicators. Default: `#DC2626`.
+</ParamField>
+
+---
+
+## `ThemeFonts` interface
+
+<ParamField body="heading" type="string" required>
+  CSS font-family stack for all heading elements (`h1`–`h6`) and display text. Default: `'Inter, system-ui, sans-serif'`.
+</ParamField>
+
+<ParamField body="body" type="string" required>
+  CSS font-family stack for body text, paragraphs, and UI labels. Default: `'Inter, system-ui, sans-serif'`.
+</ParamField>
+
+<ParamField body="serif" type="string" required>
+  Optional serif stack for editorial contexts and luxury themes. Even when not actively used in a theme, the field must be populated. Default: `'Georgia, "Times New Roman", serif'`.
+</ParamField>
+
+---
+
+## `ThemeRadius` interface
+
+<ParamField body="sm" type="string" required>
+  Small border radius for inputs, tags, and tight UI elements. Default: `'0.375rem'`.
+</ParamField>
+
+<ParamField body="md" type="string" required>
+  Medium border radius for cards, buttons, and panels. Default: `'0.75rem'`.
+</ParamField>
+
+<ParamField body="lg" type="string" required>
+  Large border radius for modals, image containers, and hero cards. Default: `'1rem'`.
+</ParamField>
+
+<ParamField body="xl" type="string" required>
+  Extra-large border radius for prominent feature cards and showcase tiles. Default: `'1.5rem'`.
+</ParamField>
+
+<ParamField body="full" type="string" required>
+  Pill-shaped radius for badges, avatar borders, and pill buttons. Default: `'9999px'`.
+</ParamField>
+
+---
+
+## `ThemeShadow` interface
+
+<ParamField body="sm" type="string" required>
+  Subtle shadow for interactive elements on hover and focused inputs. Default: `'0 1px 2px rgb(0 0 0 / 0.08)'`.
+</ParamField>
+
+<ParamField body="md" type="string" required>
+  Medium shadow for cards and dropdowns. Default: `'0 8px 24px rgb(0 0 0 / 0.10)'`.
+</ParamField>
+
+<ParamField body="lg" type="string" required>
+  Large shadow for modals, hero cards, and highly elevated surfaces. Default: `'0 16px 48px rgb(0 0 0 / 0.14)'`.
+</ParamField>
+
+---
+
+## `ThemeLayout` interface
+
+<ParamField body="containerMaxWidth" type="string" required>
+  Maximum width of the main content container. Applied to the `AppContainer` wrapper to constrain page width on large screens. Default: `'1280px'`.
+</ParamField>
+
+<ParamField body="sectionSpacing" type="string" required>
+  Vertical padding applied to major page sections for consistent rhythm. Default: `'5rem'`.
+</ParamField>
+
+---
+
+## CSS variable mapping
+
+`themeToCssVars(theme)` in `app/core/utils/theme-to-css-vars.ts` maps every token field to a CSS custom property on `:root`. The table below shows the complete mapping:
+
+| Token path | CSS variable |
+|------------|-------------|
+| `colors.background` | `--color-background` |
+| `colors.foreground` | `--color-foreground` |
+| `colors.surface` | `--color-surface` |
+| `colors.surfaceMuted` | `--color-surface-muted` |
+| `colors.primary` | `--color-primary` |
+| `colors.primaryForeground` | `--color-primary-foreground` |
+| `colors.secondary` | `--color-secondary` |
+| `colors.secondaryForeground` | `--color-secondary-foreground` |
+| `colors.accent` | `--color-accent` |
+| `colors.accentForeground` | `--color-accent-foreground` |
+| `colors.muted` | `--color-muted` |
+| `colors.border` | `--color-border` |
+| `colors.card` | `--color-card` |
+| `colors.cardForeground` | `--color-card-foreground` |
+| `colors.success` | `--color-success` |
+| `colors.warning` | `--color-warning` |
+| `colors.error` | `--color-error` |
+| `radius.sm` | `--radius-sm` |
+| `radius.md` | `--radius-md` |
+| `radius.lg` | `--radius-lg` |
+| `radius.xl` | `--radius-xl` |
+| `radius.full` | `--radius-full` |
+| `shadow.sm` | `--shadow-sm` |
+| `shadow.md` | `--shadow-md` |
+| `shadow.lg` | `--shadow-lg` |
+| `fonts.heading` | `--font-heading` |
+| `fonts.body` | `--font-body` |
+| `fonts.serif` | `--font-serif` |
+| `layout.containerMaxWidth` | `--container-max-width` |
+| `layout.sectionSpacing` | `--section-spacing` |
+
+Note that `surfaceMuted` serializes to `--color-surface-muted` (hyphen-separated) and `primaryForeground` to `--color-primary-foreground` — camelCase field names are converted to kebab-case CSS variable names.
+
+---
+
+## Default theme values
+
+The default theme is defined in `app/themes/default.theme.ts`:
+
+```ts
+export const defaultTheme: ThemeConfig = {
+  id: 'default',
+  name: 'Default Theme',
+  colors: {
+    background:          '#FFFFFF',
+    foreground:          '#111827',
+    surface:             '#FFFFFF',
+    surfaceMuted:        '#F5F5F4',
+    primary:             '#0F766E',
+    primaryForeground:   '#FFFFFF',
+    secondary:           '#F5F5F4',
+    secondaryForeground: '#111827',
+    accent:              '#D97706',
+    accentForeground:    '#FFFFFF',
+    muted:               '#6B7280',
+    border:              '#E5E7EB',
+    card:                '#FFFFFF',
+    cardForeground:      '#111827',
+    success:             '#16A34A',
+    warning:             '#D97706',
+    error:               '#DC2626',
+  },
+  fonts: {
+    heading: 'Inter, system-ui, sans-serif',
+    body:    'Inter, system-ui, sans-serif',
+    serif:   'Georgia, "Times New Roman", serif',
+  },
+  radius: {
+    sm:   '0.375rem',
+    md:   '0.75rem',
+    lg:   '1rem',
+    xl:   '1.5rem',
+    full: '9999px',
+  },
+  shadow: {
+    sm: '0 1px 2px rgb(0 0 0 / 0.08)',
+    md: '0 8px 24px rgb(0 0 0 / 0.10)',
+    lg: '0 16px 48px rgb(0 0 0 / 0.14)',
+  },
+  layout: {
+    containerMaxWidth: '1280px',
+    sectionSpacing:    '5rem',
+  },
+}
+```
+
+---
+
+## Registering a custom theme
+
+Themes are registered in `app/themes/index.ts`. To add a new theme:
+
+1. Create a new file (e.g. `app/themes/luxury.theme.ts`) that exports a `ThemeConfig` object.
+2. Import it in `app/themes/index.ts` and add it to the `themes` registry under its `id`.
+3. Set `AgencyConfig.theme` to the new theme's `id` in the agency config file.
+
+```ts
+// app/themes/index.ts
+import type { ThemeConfig } from '~/types/theme.types'
+import { defaultTheme } from './default.theme'
+import { luxuryTheme } from './luxury.theme'   // your new theme
+
+export const themes: Record<string, ThemeConfig> = {
+  [defaultTheme.id]: defaultTheme,
+  [luxuryTheme.id]:  luxuryTheme,
+}
+
+export function resolveTheme(id: string): ThemeConfig {
+  return themes[id] ?? defaultTheme
+}
+```
+
+```ts
+// app/config/agencies/acme.agency.ts
+export const acmeAgencyConfig: AgencyConfig = {
+  // ...
+  theme: 'luxury',   // matches luxuryTheme.id
+}
+```
+
+The `validateAgencyConfig` function checks that the theme ID exists in the registry and throws a `ZodError` if not, so a typo in the `theme` field will surface at module load rather than producing a silent visual regression.
+
+<Tip>
+  You can override just a subset of tokens from the default theme using JavaScript spread syntax. Only specify the tokens that differ — this keeps custom themes concise and easy to maintain.
+
+  ```ts
+  import { defaultTheme } from './default.theme'
+  import type { ThemeConfig } from '~/types/theme.types'
+
+  export const luxuryTheme: ThemeConfig = {
+    ...defaultTheme,
+    id: 'luxury',
+    name: 'Luxury Theme',
+    colors: {
+      ...defaultTheme.colors,
+      primary:           '#B8860B',
+      primaryForeground: '#FFFFFF',
+      accent:            '#C0392B',
+      accentForeground:  '#FFFFFF',
+    },
+  }
+  ```
+</Tip>

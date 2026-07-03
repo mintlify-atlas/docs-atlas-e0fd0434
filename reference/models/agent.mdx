@@ -1,0 +1,111 @@
+---
+title: "Agent data model for team member profiles"
+sidebarTitle: "Agent"
+description: "The Agent interface models a real estate agent or team member. Fields include contact details, portrait image, role, short bio, and optional specialty tags."
+---
+
+The `Agent` interface models an individual real estate agent or team member whose profile is displayed in the agency's team section. Agent records drive the team roster on the agents page and, when `AgencyConfig.modules.agents` is enabled, appear in the site navigation. The interface lives at `app/features/agents/types/agent.types.ts` and is designed to be backend-friendly: the static MVP data in `app/features/agents/data/agents.ts` can be replaced by an API response without changing any component that consumes agent data.
+
+<Note>
+  `Agent` currently has no Zod schema. The TypeScript compiler enforces the shape at build time. A future task may add an agent schema mirroring the validation pattern in `app/features/properties/schemas/property.schema.ts`.
+</Note>
+
+---
+
+## `Agent` interface
+
+<ParamField body="id" type="string" required>
+  Unique agent identifier. Must be a non-empty string. Cross-referenced by `Property.agentId` to associate listings with a specific team member. `propertiesService.getRelated()` awards a +1 score bonus when two properties share the same `agentId`.
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  Full display name of the agent (e.g. `'María López'`). Rendered on profile cards and the agents page. Agency content — not an i18n key.
+</ParamField>
+
+<ParamField body="role" type="string" required>
+  Job title or position within the agency (e.g. `'Senior Sales Agent'`, `'Rental Specialist'`). Agency content — not an i18n key. Rendered as a subtitle on team cards.
+</ParamField>
+
+<ParamField body="bio" type="string" required>
+  Short biography or professional summary shown on the team card. Keep it concise — typically one to three sentences. Agency content — not an i18n key.
+</ParamField>
+
+<ParamField body="image" type="string" required>
+  Portrait or cover image path served from `public/` (e.g. `'/images/agents/maria-lopez.jpg'`). Images should be placed under `public/images/agents/` by convention to keep agent assets organized. Used as the card thumbnail and detail portrait.
+</ParamField>
+
+<ParamField body="phone" type="string">
+  Direct phone line for the agent. Optional. Stored in human-readable format (e.g. `'+52 81 1234 5678'`). Rendered as a `tel:` link on contact surfaces.
+</ParamField>
+
+<ParamField body="email" type="string">
+  Direct email address for the agent. Optional. Rendered as a `mailto:` link on contact surfaces.
+</ParamField>
+
+<ParamField body="whatsapp" type="string">
+  WhatsApp contact number for the agent. Optional. Stored in any human-readable format — digits, spaces, dashes, parentheses, and a leading `+` are all accepted. The `buildWhatsAppLink` utility in `app/core/utils/whatsapp-link.ts` normalizes the value at render time.
+</ParamField>
+
+<ParamField body="specialties" type="string[]">
+  Short specialty tags displayed as badge-style labels on the agent profile (e.g. `['Luxury Homes', 'Pre-sale Units', 'Commercial']`). Optional. Agency content strings — not i18n keys.
+</ParamField>
+
+---
+
+## WhatsApp number formatting
+
+The `whatsapp` field accepts numbers in any common human format. The `buildWhatsAppLink` utility strips every non-digit character and builds a standard `wa.me` deep link:
+
+```ts
+// app/core/utils/whatsapp-link.ts
+export function buildWhatsAppLink(phone: string | undefined | null): string | null {
+  if (!phone) return null
+  const digits = phone.replace(/\D/g, '')
+  return digits ? `https://wa.me/${digits}` : null
+}
+```
+
+The function returns `null` when the input is empty or produces no digits, so contact components can use a simple `v-if="whatsappLink"` to hide the button gracefully. Always include the country code in the stored number — without it, `wa.me` links may fail to route to the correct number.
+
+```ts
+// Correct — includes country code
+whatsapp: '+52 81 1234 5678'   // → https://wa.me/528112345678
+whatsapp: '1-800-555-1234'      // → https://wa.me/18005551234
+
+// Risky — no country code, may fail for international users
+whatsapp: '81 1234 5678'
+```
+
+---
+
+## Image path conventions
+
+Agent portrait images are served from `public/` and referenced by their path relative to the public root:
+
+```ts
+// In agents.ts
+{
+  id: 'agent-01',
+  image: '/images/agents/maria-lopez.jpg',
+  // ...
+}
+```
+
+The recommended directory is `public/images/agents/`. Using a consistent subdirectory keeps agent assets separate from property images (`public/images/properties/`) and development images (`public/images/developments/`). Square or portrait-oriented images work best with the team card layout.
+
+---
+
+## Linking agents to properties
+
+Properties are associated with an agent via `Property.agentId`:
+
+```ts
+// In properties.ts
+{
+  id: 'prop-101',
+  agentId: 'agent-01',
+  // ...
+}
+```
+
+The `agentId` value must match an `Agent.id` in the agents data file. The template does not currently join and embed the full agent object into property objects at service level — components that need to display both a property and its agent must look up the agent separately from the agents data.

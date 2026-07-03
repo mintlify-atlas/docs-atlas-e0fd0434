@@ -1,0 +1,224 @@
+---
+title: "Replace sample data with real agency content"
+sidebarTitle: "Data & Content"
+description: "Swap the six placeholder data files with real properties, agents, developments, testimonials, locations, and stats. Zod validates every record at module load."
+---
+
+The template ships with six data files containing placeholder agency content — fictional properties in Mexican cities, sample agents with generic names, and approximate statistics. Every piece of this content is intentionally generic so a real agency can replace it without touching a single component. The files are plain TypeScript arrays of typed objects. Once you swap them out, all pages, cards, filters, sitemaps, and JSON-LD structured data update automatically. The data shapes are enforced by Zod schemas at module load, so a typo in an `operationType` value or a missing required field fails fast with a clear error message before the app ever serves a request.
+
+## The six data files
+
+| File | What it contains |
+|---|---|
+| `app/features/properties/data/properties.ts` | Full property catalog: titles, descriptions, prices, locations, images, features |
+| `app/features/agents/data/agents.ts` | Team member directory: names, roles, bios, contact details, photos |
+| `app/features/developments/data/developments.ts` | Development portfolio: projects, status, price ranges, floor plan data |
+| `app/features/home/data/stats.ts` | Homepage trust statistics: years of experience, properties listed, happy clients |
+| `app/features/home/data/locations.ts` | Areas served: city names, slugs, images, and property counts |
+| `app/features/home/data/testimonials.ts` | Client testimonials: quotes, names, roles, and star ratings |
+
+<Note>
+  These files contain **agency content** — real strings like property titles, agent names, and city names. They are **not** i18n keys. Translations (button labels, headings, filter options) live in `i18n/locales/en.json` and `i18n/locales/es.json`. See [Internationalization](/customization/i18n) for the distinction.
+</Note>
+
+## Property records
+
+Properties are the most data-rich records. Each entry in `properties.ts` is a `Property` object validated against `propertyListSchema` at module load.
+
+### Key fields
+
+```typescript app/features/properties/data/properties.ts (example record)
+{
+  id: 'prop-001',
+  title: 'Modern Hillside Villa',
+  slug: 'modern-hillside-villa',
+  description:
+    'A bright, contemporary villa with floor-to-ceiling windows, an open-plan living area and panoramic views over the valley.',
+  operationType: 'sale',          // 'sale' | 'rent'
+  propertyType: 'house',          // 'house' | 'apartment' | 'land' | 'commercial' | 'office'
+  price: 685000,
+  currency: 'USD',
+  location: 'Las Lomas',          // Neighborhood or sub-area
+  city: 'Monterrey',
+  state: 'Nuevo León',
+  country: 'Mexico',
+  bedrooms: 4,
+  bathrooms: 3,
+  parkingSpaces: 2,
+  sizeUnit: 'metric',             // 'metric' (m²) | 'imperial' (ft²)
+  constructionSize: 320,
+  landSize: 480,
+  images: [
+    '/images/properties/property-01.svg',
+    '/images/properties/property-02.svg',
+    '/images/properties/property-03.svg',
+  ],
+  coverImage: '/images/properties/property-01.svg',
+  amenities: ['garden', 'terrace', 'security'],
+  status: 'available',            // 'available' | 'sold' | 'rented' | 'reserved' | 'hidden'
+  featured: true,
+}
+```
+
+### Field notes
+
+<Accordion title="operationType and propertyType — allowed values">
+  The Zod schema validates these as strict enums. Any value outside the allowed set causes a `ZodError` at module load and prevents the app from booting.
+
+  | Field | Allowed values |
+  |---|---|
+  | `operationType` | `'sale'`, `'rent'` |
+  | `propertyType` | `'house'`, `'apartment'`, `'land'`, `'commercial'`, `'office'` |
+
+  To add a new type (e.g. `'warehouse'`), extend both the TypeScript union in `app/features/properties/types/property.types.ts` and the Zod enum in `app/features/properties/schemas/property.schema.ts`, then add the corresponding label to `properties.types.*` in both locale files.
+</Accordion>
+
+<Accordion title="status — effect on visibility">
+  | Value | Visible on /properties | Appears in sitemap |
+  |---|---|---|
+  | `available` | ✅ | ✅ |
+  | `reserved` | ✅ | ✅ |
+  | `sold` | ✅ | ✅ |
+  | `rented` | ✅ | ✅ |
+  | `hidden` | ❌ | ❌ |
+
+  Use `'hidden'` to keep a record in the data file without exposing it on the live site.
+</Accordion>
+
+<Accordion title="sizeUnit — metric vs imperial">
+  Set `sizeUnit` explicitly on every record. The template **never auto-converts** between m² and ft². If a record has `sizeUnit: 'metric'` and the agency's `measurementUnit` is `'imperial'`, the record's area is still displayed in m² — per-record always wins. When replacing the sample data for a US-market agency, change both the `sizeUnit` value and the underlying area number in the same pass.
+</Accordion>
+
+<Accordion title="currency — per-record override">
+  Each property record has its own `currency` field. Property cards use the per-record value, not the agency-level `agency.currency`. This allows a portfolio that mixes USD and MXN listings, for example. Set `currency` consistently across the catalog unless you intentionally want per-record overrides.
+</Accordion>
+
+## Agent records
+
+```typescript app/features/agents/data/agents.ts (example record)
+{
+  id: 'agent-001',
+  name: 'María González',
+  role: 'Senior Advisor',
+  bio: 'Over a decade helping families and investors find the right home in the metropolitan area.',
+  image: '/images/agents/agent-01.svg',
+  phone: '1-800-555-1234',
+  email: 'maria@example.com',
+  whatsapp: '1-800-555-1234',
+  specialties: ['Residential', 'First-time buyers'],
+}
+```
+
+`phone`, `email`, and `whatsapp` are all optional — agent-003 in the sample data deliberately omits `phone` and `whatsapp` to demonstrate a partial contact profile. The agent card hides call and WhatsApp buttons when those fields are absent.
+
+## Development records
+
+```typescript app/features/developments/data/developments.ts (example record)
+{
+  id: 'dev-001',
+  name: 'Mirador del Valle',
+  slug: 'mirador-del-valle',
+  status: 'pre-sale',           // 'pre-sale' | 'under-construction' | 'ready-to-deliver' | 'sold-out'
+  location: 'Valle Oriente, Monterrey',
+  description:
+    'A boutique pre-sale of 24 apartments with panoramic views, two-bedroom layouts and shared rooftop amenities.',
+  image: '/images/developments/development-01.svg',
+  priceFrom: 285000,
+  priceTo: 420000,
+  currency: 'USD',
+  units: 24,
+  bedrooms: 2,
+  sizeUnit: 'metric',
+  areaFrom: 78,
+  areaTo: 112,
+  deliveryDate: '2026-06',      // ISO 8601 year-month string
+  featured: true,
+}
+```
+
+## Homepage stats
+
+Stats are simple label-value pairs. The `value` is a pre-formatted string; the `labelKey` is an i18n key resolved at render time.
+
+```typescript app/features/home/data/stats.ts
+export const homeStats: HomeStat[] = [
+  { id: 'stat-experience', value: '15+',    labelKey: 'home.about.stats.experience', icon: 'mdi:calendar-clock' },
+  { id: 'stat-properties', value: '1,200+', labelKey: 'home.about.stats.properties', icon: 'mdi:home-city-outline' },
+  { id: 'stat-clients',    value: '3,500+', labelKey: 'home.about.stats.clients',    icon: 'mdi:account-group-outline' },
+  { id: 'stat-areas',      value: '20+',    labelKey: 'home.about.stats.areas',      icon: 'mdi:map-marker-radius-outline' },
+]
+```
+
+Replace the `value` strings with your agency's real numbers. The `labelKey` values map to `i18n/locales/en.json` keys — update those too if you want different label wording.
+
+## Homepage locations
+
+```typescript app/features/home/data/locations.ts
+export const homeLocations: HomeLocation[] = [
+  {
+    id: 'loc-monterrey',
+    name: 'Monterrey',
+    slug: 'monterrey',
+    image: '/images/locations/location-01.svg',
+    propertyCount: 48,
+  },
+  // …
+]
+```
+
+The `slug` value is used to build a deep-link URL to `/properties?location=monterrey`. Keep slugs lowercase and URL-safe. The `propertyCount` is a static display number — it is not computed dynamically from the properties data file, so remember to update it when you add or remove properties.
+
+## Testimonials
+
+```typescript app/features/home/data/testimonials.ts
+export const homeTestimonials: HomeTestimonial[] = [
+  {
+    id: 'tst-001',
+    name: 'María González',
+    role: 'Bought a family home',
+    quote:
+      'The team understood exactly what we were looking for and found our home in weeks.',
+    rating: 5,                  // integer 1–5
+  },
+  // …
+]
+```
+
+## Runtime Zod validation
+
+The property data file ends with a `propertyListSchema.parse()` call that runs synchronously at module load:
+
+```typescript
+export const sampleProperties: Property[] = propertyListSchema.parse(rawProperties)
+```
+
+If any record fails the schema — for example an `operationType` of `'lease'` instead of `'rent'`, or a missing required `id` field — the application throws a `ZodError` before serving a single request. This is intentional: it means you catch data mistakes during development and CI, not in production.
+
+<Warning>
+  The app will **not boot** if any property record fails Zod validation. When replacing sample data, run `pnpm dev` immediately after editing `properties.ts` to catch errors before your first commit. The ZodError message tells you exactly which record and which field failed.
+</Warning>
+
+## Replacing image assets
+
+The template ships SVG placeholder images in `public/images/`. Replace them with real agency photos in `.webp` or `.jpg` format for production. You can either keep the same filenames (simplest) or use new filenames and update the paths in the data files.
+
+```
+public/images/
+├── logo.svg                          ← Agency logo (header, footer, OG fallback)
+├── properties/
+│   ├── property-01.svg  →  property-01.webp
+│   └── …
+├── agents/
+│   ├── agent-01.svg     →  agent-01.webp
+│   └── …
+├── developments/
+│   ├── development-01.svg → development-01.webp
+│   └── …
+└── locations/
+    ├── location-01.svg  →  location-01.webp
+    └── …
+```
+
+<Tip>
+  Export hero and property cover images as WebP or AVIF for the best Largest Contentful Paint (LCP) score. Any above-the-fold image should also have `loading="eager"` and `fetchpriority="high"` on its `<ResponsiveImage>` call — the template already applies these to the homepage hero and property detail cover, but new above-the-fold images you introduce should follow the same pattern.
+</Tip>

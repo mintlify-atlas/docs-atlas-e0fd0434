@@ -1,0 +1,624 @@
+---
+title: "Feature components for properties, agents, and developments"
+sidebarTitle: "Feature Components"
+description: "Domain-specific components like PropertyCard, AgentCard, DevelopmentCard, and PropertyGallery accept typed props and handle display logic without direct data fetching."
+---
+
+Feature components are the domain-aware layer of the template. Unlike the generic `Base*` primitives, they understand real estate concepts — properties, agents, developments — but still follow a strict rule: **they never fetch their own data**. Every feature component receives a typed prop and renders it. Data fetching belongs in page-level composables or feature services. This separation makes the components trivially testable and reusable in any context (search results, featured sections, detail sidebars) without coupling them to a specific data source.
+
+---
+
+## Properties
+
+### PropertyCard
+
+`PropertyCard` is the primary property listing component used across the homepage, search results, and related-property carousels. It follows the visual hierarchy defined in `docs/DESIGN.md`: image → price → title → location → key features → details link.
+
+The card is built on top of `BaseCard` with `padding="none"` so the cover image renders edge-to-edge. An absolute badge strip over the image communicates the operation type (`For Sale` / `For Rent`) and, when relevant, the property status (Reserved, Sold, Rented). A `"available"` status is intentionally suppressed — no badge is shown — because it adds no information.
+
+**Composables used:** `useSiteConfig()` for the agency `measurementUnit` (m² vs ft²), `useI18n()` for all visible label keys.
+
+### Props
+
+<ParamField path="property" type="Property" required>
+  The full property domain object. See the complete type definition below.
+
+  ```ts
+  interface Property {
+    id: string
+    title: string
+    slug: string
+    description: string
+    operationType: 'sale' | 'rent'
+    propertyType: 'house' | 'apartment' | 'land' | 'commercial' | 'office'
+    price: number
+    currency: string
+    location: string
+    city: string
+    state: string
+    country: string
+    bedrooms?: number
+    bathrooms?: number
+    parkingSpaces?: number
+    sizeUnit?: 'metric' | 'imperial'
+    constructionSize?: number
+    landSize?: number
+    images: string[]
+    coverImage: string
+    amenities: string[]
+    developmentId?: string
+    agentId?: string
+    coordinates?: { lat: number; lng: number }
+    status: 'available' | 'sold' | 'rented' | 'reserved' | 'hidden'
+    featured: boolean
+  }
+  ```
+</ParamField>
+
+### Behavior
+
+- The detail page link is derived automatically as `/properties/${property.slug}`.
+- Area is displayed as `constructionSize ?? landSize`. The unit label (`m²` or `ft²`) respects `property.sizeUnit` when present, otherwise falls back to the agency's `measurementUnit`.
+- `bedrooms`, `bathrooms`, `parkingSpaces`, and area are each guarded with `v-if` so partial records render gracefully without showing empty slots.
+- The status badge variant maps: `reserved` → `warning`, `sold` / `rented` → `neutral`.
+- Price is formatted by `CurrencyText` with a `/ month` suffix appended for rental properties.
+- The card has `class="group"` so child elements can respond to hover with `group-hover:` variants (e.g. the arrow icon slides right).
+
+### Usage example
+
+```vue
+<script setup lang="ts">
+import type { Property } from '~/features/properties/types/property.types'
+
+const props = defineProps<{ property: Property }>()
+</script>
+
+<template>
+  <PropertyCard :property="property" />
+</template>
+```
+
+---
+
+### PropertyGrid
+
+`PropertyGrid` renders a responsive CSS grid of `PropertyCard` components. When the `properties` array is empty it shows an accessible empty state with an optional "Clear filters" link, so users can recover from a zero-result filter without scrolling.
+
+### Props
+
+<ParamField path="properties" type="Property[]" required>
+  Array of property objects to render. When the array is empty, the empty state is shown.
+</ParamField>
+
+<ParamField path="emptyMessage" type="string">
+  Custom message to display when `properties` is empty. Falls back to the `common.empty` i18n key when omitted.
+</ParamField>
+
+<ParamField path="clearFiltersHref" type="string">
+  When provided, renders a `BaseButton` ghost link inside the empty state pointing to this path (typically `/properties`) so users can reset their filters in one click.
+</ParamField>
+
+### Usage example
+
+```vue
+<script setup lang="ts">
+const { data: properties } = await useFeaturedProperties()
+</script>
+
+<template>
+  <!-- On a search results page -->
+  <PropertyGrid
+    :properties="filteredProperties"
+    :clear-filters-href="'/properties'"
+    :empty-message="$t('properties.noResults')"
+  />
+
+  <!-- On the homepage featured section -->
+  <PropertyGrid :properties="properties" />
+</template>
+```
+
+The grid automatically collapses from three columns (`xl`) to two columns (`sm`) to a single column on mobile using `grid-cols-1 sm:grid-cols-2 xl:grid-cols-3`.
+
+---
+
+### PropertyGallery
+
+`PropertyGallery` is the main image display for property detail pages. It renders a large active image with an accessible thumbnail strip below it. Each thumbnail is a real `<button>` element (activated by Enter and Space without JavaScript) with an `aria-label` and an `aria-current="true"` marker on the active thumbnail.
+
+When `images` is empty, the gallery falls back gracefully to `[coverImage]`, so a property record that only defines a cover image still renders without errors.
+
+The main image is treated as the **LCP element** of the detail page. It always uses `loading="eager"` and `fetchpriority="high"` to start the download immediately and tell the browser it is the priority resource. Thumbnails use `loading="lazy"`.
+
+### Props
+
+<ParamField path="images" type="string[]" required>
+  Array of full-resolution image paths for the property (typically `property.images`). May be empty — the component falls back to `coverImage` automatically.
+</ParamField>
+
+<ParamField path="coverImage" type="string" required>
+  The property's primary image path (`property.coverImage`). Used as the sole image when `images` is empty.
+</ParamField>
+
+<ParamField path="title" type="string" required>
+  The property title used as `alt` text on the main image for accessibility.
+</ParamField>
+
+### Usage example
+
+```vue
+<script setup lang="ts">
+const property = await usePropertyDetail(route.params.slug as string)
+</script>
+
+<template>
+  <PropertyGallery
+    :images="property.images"
+    :cover-image="property.coverImage"
+    :title="property.title"
+  />
+</template>
+```
+
+---
+
+## Agents
+
+### AgentCard
+
+`AgentCard` displays a single agent's portrait, name, role, biography, specialties, and contact links. Contact links (phone, email, WhatsApp) are only rendered when the corresponding field is present on the `Agent` object, so partial records render gracefully without empty link slots.
+
+**Composables used:** `useI18n()` for accessible label strings, `buildWhatsAppLink` utility to construct the `wa.me` deep link from the agent's phone number.
+
+### Props
+
+<ParamField path="agent" type="Agent" required>
+  The full agent domain object.
+
+  ```ts
+  interface Agent {
+    id: string
+    name: string
+    role: string          // agency content, not an i18n key
+    bio: string
+    image: string         // portrait image path (from public/)
+    phone?: string
+    email?: string
+    whatsapp?: string     // digits or human-formatted number
+    specialties?: string[]
+  }
+  ```
+</ParamField>
+
+### Usage example
+
+```vue
+<script setup lang="ts">
+import type { Agent } from '~/features/agents/types/agent.types'
+
+defineProps<{ agent: Agent }>()
+</script>
+
+<template>
+  <!-- In a team grid -->
+  <ul class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+    <li v-for="agent in agents" :key="agent.id">
+      <AgentCard :agent="agent" />
+    </li>
+  </ul>
+</template>
+```
+
+The card uses a `1/1` aspect ratio for the portrait image, consistent with the `docs/DESIGN.md` recommendation for agent avatars.
+
+---
+
+## Developments
+
+### DevelopmentCard
+
+`DevelopmentCard` presents a real estate development project (a building or community) with its status badge, location, description, price range, unit count, bedroom count, area range, and delivery date. Because developments may be in various stages of construction, every field beyond `id`, `name`, `slug`, `status`, `location`, `description`, and `image` is optional and guarded with `v-if`.
+
+**Composables used:** `useSiteConfig()` for `agency.currency` and `agency.measurementUnit` (used when the development record does not specify its own `currency` or `sizeUnit`). `useI18n()` for status label keys and metric labels.
+
+The card's CTA always links to `/contact` rather than a detail page because individual development detail pages are not yet implemented.
+
+### Props
+
+<ParamField path="development" type="Development" required>
+  The full development domain object.
+
+  ```ts
+  type DevelopmentStatus =
+    | 'pre-sale'
+    | 'under-construction'
+    | 'ready-to-deliver'
+    | 'sold-out'
+
+  interface Development {
+    id: string
+    name: string
+    slug: string
+    status: DevelopmentStatus
+    location: string
+    description: string
+    image: string           // cover image path (from public/)
+    priceFrom?: number
+    priceTo?: number
+    currency?: string       // ISO 4217; defaults to agency.currency
+    units?: number
+    bedrooms?: number
+    sizeUnit?: 'metric' | 'imperial'
+    areaFrom?: number
+    areaTo?: number
+    deliveryDate?: string   // ISO 8601: YYYY-MM or YYYY-MM-DD
+    featured?: boolean
+  }
+  ```
+</ParamField>
+
+### Status badge variants
+
+The status badge variant is not purely color-based — each variant is always paired with a text label:
+
+| Status | Badge variant |
+|---|---|
+| `pre-sale` | `accent` |
+| `under-construction` | `primary` |
+| `ready-to-deliver` | `success` |
+| `sold-out` | `neutral` |
+
+### Usage example
+
+```vue
+<script setup lang="ts">
+const developments = await useFeaturedDevelopments()
+</script>
+
+<template>
+  <ul class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+    <li v-for="dev in developments" :key="dev.id">
+      <DevelopmentCard :development="dev" />
+    </li>
+  </ul>
+</template>
+```
+
+---
+
+## Shared Components
+
+The following components live in `app/components/shared/` and are reused across multiple features.
+
+### CurrencyText
+
+`CurrencyText` formats a monetary amount using the browser's `Intl.NumberFormat` API through the `formatCurrency` utility from `core/utils/currency-format.ts`. It reads the active locale from `useI18n()` so the formatted output adapts automatically when the user switches language (e.g. `$1,250,000` in `en` vs `1 250 000 $US` in `fr`). An optional `suffix` slot appends a muted label for rental price-per-period displays.
+
+### Props
+
+<ParamField path="amount" type="number" required>
+  The raw numeric amount to format. Pass the value exactly as stored in the domain model (no pre-formatting).
+</ParamField>
+
+<ParamField path="currency" type="string" required>
+  ISO 4217 currency code (e.g. `"USD"`, `"MXN"`, `"EUR"`). Typically sourced from `property.currency` or `agency.currency`.
+</ParamField>
+
+<ParamField path="maximumFractionDigits" type="number" default="0">
+  Maximum decimal places in the formatted output. Defaults to `0` so property prices render as whole numbers. Increase to `2` for precise amounts.
+</ParamField>
+
+### Slots
+
+| Slot | Description |
+|---|---|
+| `suffix` | Optional label appended after the formatted amount in muted smaller text. Typically used for `/ month` on rental listings. |
+
+### Usage example
+
+```vue
+<!-- Simple price display -->
+<CurrencyText :amount="1250000" currency="MXN" />
+<!-- Output: $1,250,000 (locale: en) -->
+
+<!-- Rental price with monthly suffix -->
+<CurrencyText :amount="18500" currency="MXN">
+  <template #suffix>
+    {{ $t('properties.perMonth') }}
+  </template>
+</CurrencyText>
+<!-- Output: $18,500 / month -->
+
+<!-- Price with two decimal places -->
+<CurrencyText :amount="99.99" currency="USD" :maximum-fraction-digits="2" />
+<!-- Output: $99.99 -->
+```
+
+---
+
+### ResponsiveImage
+
+`ResponsiveImage` is a standardized wrapper around `<NuxtImg>` that enforces consistent aspect ratios, object-fit cropping, rounded corners, and loading behavior. Using this component instead of raw `<img>` or `<NuxtImg>` prevents layout shift and ensures every image in the template uses the same sizing vocabulary.
+
+### Props
+
+<ParamField path="src" type="string" required>
+  The image source path. Passed directly to `<NuxtImg>`.
+</ParamField>
+
+<ParamField path="alt" type="string" required>
+  Descriptive alt text for the image. Required for accessibility. Thumbnails used purely as visual pickers should receive `alt=""` — the parent button element names them.
+</ParamField>
+
+<ParamField path="ratio" type="'1/1' | '4/3' | '3/2' | '16/9' | 'auto'" default="'4/3'">
+  Aspect ratio applied to the container.
+
+  | Value | Usage |
+  |---|---|
+  | `1/1` | Agent portraits, gallery thumbnails |
+  | `4/3` | Property cards, property gallery main image |
+  | `3/2` | Development cards |
+  | `16/9` | Hero images, blog post covers |
+  | `auto` | No fixed ratio — image height follows natural dimensions |
+</ParamField>
+
+<ParamField path="rounded" type="'none' | 'md' | 'lg' | 'xl' | 'full'" default="'lg'">
+  Border radius applied to the image container using theme radius tokens.
+</ParamField>
+
+<ParamField path="sizes" type="string">
+  The `sizes` attribute passed to `<NuxtImg>` for responsive image optimization. Should match the rendered image's display width at each breakpoint.
+</ParamField>
+
+<ParamField path="loading" type="'lazy' | 'eager'" default="'lazy'">
+  Lazy loading behavior. Use `'eager'` for above-the-fold LCP images (hero, property detail cover). All other images should keep the default `'lazy'`.
+</ParamField>
+
+<ParamField path="fetchpriority" type="'high' | 'low' | 'auto'" default="'auto'">
+  Browser fetch priority hint. For LCP images, set **both** `loading="eager"` and `fetchpriority="high"` together so the browser starts the request immediately and treats it as a high-priority resource.
+</ParamField>
+
+### Usage example
+
+```vue
+<!-- Property card image (lazy, standard card ratio) -->
+<ResponsiveImage
+  src="/images/property-001.jpg"
+  alt="Modern apartment in Polanco"
+  ratio="4/3"
+  rounded="none"
+  sizes="100vw sm:50vw xl:33vw"
+/>
+
+<!-- Hero LCP image (eager + high priority) -->
+<ResponsiveImage
+  src="/images/hero-bg.jpg"
+  alt="Luxury living in Mexico City"
+  ratio="16/9"
+  rounded="none"
+  loading="eager"
+  fetchpriority="high"
+  sizes="100vw"
+/>
+
+<!-- Agent portrait (square crop, rounded full) -->
+<ResponsiveImage
+  :src="agent.image"
+  :alt="agent.name"
+  ratio="1/1"
+  rounded="full"
+  sizes="100vw sm:50vw lg:33vw"
+/>
+```
+
+---
+
+### SectionHeader
+
+`SectionHeader` renders a consistent heading block that appears at the top of most page sections. It supports three text levels: an optional eyebrow (small uppercase pre-label), a required title, and an optional subtitle. Text is passed in already translated by the caller so the component itself remains i18n-agnostic.
+
+### Props
+
+<ParamField path="title" type="string" required>
+  The main section heading. Rendered via `BaseHeading` at the configured `level`.
+</ParamField>
+
+<ParamField path="eyebrow" type="string">
+  Optional small uppercase label rendered above the title in `--color-accent`. Useful for section categorization (e.g. "Featured Listings", "Our Team").
+</ParamField>
+
+<ParamField path="subtitle" type="string">
+  Optional descriptive paragraph rendered below the title in `--color-muted`.
+</ParamField>
+
+<ParamField path="align" type="'left' | 'center'" default="'left'">
+  Text alignment. Center-aligned headers are used for full-width sections; left-aligned headers suit sidebar or split-layout sections.
+</ParamField>
+
+<ParamField path="level" type="1 | 2 | 3 | 4 | 5 | 6" default="2">
+  The semantic heading level passed to `BaseHeading`. Defaults to `h2` since section headers are almost always secondary headings. Override to `3` when the header sits inside a section that already has an `h2`.
+</ParamField>
+
+### Usage example
+
+```vue
+<!-- Left-aligned section header with eyebrow -->
+<SectionHeader
+  eyebrow="$t('home.sections.featured.eyebrow')"
+  :title="$t('home.sections.featured.title')"
+  :subtitle="$t('home.sections.featured.subtitle')"
+/>
+
+<!-- Centered header for a full-width CTA section -->
+<SectionHeader
+  :title="$t('home.cta.title')"
+  align="center"
+/>
+```
+
+---
+
+### CtaBlock
+
+`CtaBlock` is a visually prominent call-to-action panel used at the bottom of key sections and pages. It wraps a heading, an optional description, and an `actions` slot where the caller provides one or more `BaseButton` elements. The `tone` prop determines whether the panel uses the primary brand color or a neutral surface background.
+
+### Props
+
+<ParamField path="title" type="string" required>
+  The CTA heading text. Should be passed as an already-translated string (i.e. `$t('...')`).
+</ParamField>
+
+<ParamField path="description" type="string">
+  Optional supporting text rendered below the title. On `tone="primary"` panels it renders at 90% opacity; on `tone="surface"` it renders in `--color-muted`.
+</ParamField>
+
+<ParamField path="tone" type="'primary' | 'surface'" default="'primary'">
+  Background tone for the panel.
+
+  | Value | Background | Text |
+  |---|---|---|
+  | `primary` | `--color-primary` | `--color-primary-foreground` |
+  | `surface` | `--color-surface-muted` | `--color-foreground` |
+</ParamField>
+
+<ParamField path="align" type="'left' | 'center'" default="'center'">
+  Text and actions alignment within the panel.
+</ParamField>
+
+### Slots
+
+| Slot | Description |
+|---|---|
+| `actions` | Slot for one or more `BaseButton` elements. Rendered in a flex row (wraps to column on mobile). |
+
+### Usage example
+
+```vue
+<!-- Homepage bottom CTA band -->
+<CtaBlock
+  :title="$t('home.cta.title')"
+  :description="$t('home.cta.description')"
+  tone="primary"
+  align="center"
+>
+  <template #actions>
+    <BaseButton to="/properties" variant="secondary" size="lg">
+      {{ $t('home.cta.browseButton') }}
+    </BaseButton>
+    <BaseButton to="/contact" variant="outline" size="lg">
+      {{ $t('home.cta.contactButton') }}
+    </BaseButton>
+  </template>
+</CtaBlock>
+
+<!-- Surface-tone CTA for a lighter section -->
+<CtaBlock
+  :title="$t('agents.cta.title')"
+  tone="surface"
+  align="left"
+>
+  <template #actions>
+    <BaseButton to="/contact" variant="primary" size="md">
+      {{ $t('agents.cta.button') }}
+    </BaseButton>
+  </template>
+</CtaBlock>
+```
+
+---
+
+### SocialLinks
+
+`SocialLinks` renders the agency's social media profile links as a horizontal row of icon-only circle buttons. Only platforms with a non-empty URL in `AgencySocialConfig` are rendered — enabling or disabling a social network is purely a configuration change with no template modification required.
+
+**Supported platforms:** `facebook` (`mdi:facebook`), `instagram` (`mdi:instagram`), `linkedin` (`mdi:linkedin`), `tiktok` (`simple-icons:tiktok`), `youtube` (`mdi:youtube`). Unknown platform keys fall back to `mdi:link-variant`.
+
+### Props
+
+<ParamField path="links" type="AgencySocialConfig" required>
+  The agency's social configuration object. Typically sourced from `useSiteConfig().agency.social`.
+
+  ```ts
+  interface AgencySocialConfig {
+    facebook?: string
+    instagram?: string
+    linkedin?: string
+    tiktok?: string
+    youtube?: string
+  }
+  ```
+
+  Only keys with a truthy URL value are rendered as links.
+</ParamField>
+
+### Usage example
+
+```vue
+<script setup lang="ts">
+const site = useSiteConfig()
+</script>
+
+<template>
+  <!-- In AppFooter's branding column -->
+  <SocialLinks :links="site.agency.social" class="mt-4" />
+</template>
+```
+
+Each link opens in a new tab with `rel="noopener noreferrer"`. The `aria-label` on each link is set to the platform name (e.g. `"instagram"`) for screen reader identification.
+
+---
+
+### FeatureItem
+
+`FeatureItem` renders a single icon + title + description block used in "Why choose us" sections, amenity lists, benefit grids, and any other feature-highlight context. Text is passed in already translated by the caller. The `align` prop switches between a left-aligned (horizontal reading) and a center-aligned (stacked, grid-friendly) layout.
+
+### Props
+
+<ParamField path="icon" type="string" required>
+  Nuxt Icon name for the feature icon (e.g. `"mdi:home-heart"`, `"mdi:shield-check"`). Rendered via `BaseIcon` at size `lg` inside a rounded `--color-surface-muted` container with `--color-primary` text color.
+</ParamField>
+
+<ParamField path="title" type="string" required>
+  The feature name or benefit heading. Rendered via `BaseHeading :level="3" size="md"`.
+</ParamField>
+
+<ParamField path="description" type="string">
+  Optional supporting text rendered in `--color-muted` below the title.
+</ParamField>
+
+<ParamField path="align" type="'left' | 'center'" default="'left'">
+  Layout direction. `'left'` stacks icon and text in a left-aligned column. `'center'` centers everything, suitable for feature grids where items are arranged horizontally.
+</ParamField>
+
+### Usage example
+
+```vue
+<!-- Three-column "Why choose us" grid -->
+<div class="grid grid-cols-1 gap-8 md:grid-cols-3">
+  <FeatureItem
+    icon="mdi:home-search"
+    :title="$t('home.features.expertise.title')"
+    :description="$t('home.features.expertise.description')"
+    align="center"
+  />
+  <FeatureItem
+    icon="mdi:shield-check-outline"
+    :title="$t('home.features.trust.title')"
+    :description="$t('home.features.trust.description')"
+    align="center"
+  />
+  <FeatureItem
+    icon="mdi:handshake-outline"
+    :title="$t('home.features.service.title')"
+    :description="$t('home.features.service.description')"
+    align="center"
+  />
+</div>
+
+<!-- Left-aligned amenity list on a property detail page -->
+<ul class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+  <li v-for="amenity in property.amenities" :key="amenity">
+    <FeatureItem icon="mdi:check-circle-outline" :title="amenity" align="left" />
+  </li>
+</ul>
+```

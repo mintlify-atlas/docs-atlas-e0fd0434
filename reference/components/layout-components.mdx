@@ -1,0 +1,228 @@
+---
+title: "App layout components and shell structure"
+sidebarTitle: "Layout Components"
+description: "The App* layout components build the site shell: header, navbar, footer, mobile menu, language switcher, and logo. All read agency data via useSiteConfig()."
+---
+
+The `App*` layout components assemble the site shell that wraps every public page of the template. They live in `app/components/layout/` and are prefixed with `App` to distinguish them from business-feature components. Unlike the generic `Base*` UI primitives, layout components are allowed — and expected — to consume agency configuration from the `useSiteConfig()` composable, navigation from `config/navigation`, and locale data from `@nuxtjs/i18n`. The key architectural rule they enforce is that **no agency-specific text or branding is ever hardcoded** inside a component: logos come from `agency.logo`, slogans from `agency.slogan`, navigation labels from i18n keys, and contact details from `agency.contact`.
+
+---
+
+## Default Layout Composition
+
+Before diving into individual components, it helps to understand how they are assembled. The file `app/layouts/default.vue` is the single public layout that wraps every page:
+
+```vue
+<!-- app/layouts/default.vue -->
+<template>
+  <div
+    class="flex min-h-screen flex-col bg-[var(--color-background)] text-[var(--color-foreground)]"
+    :inert="mobileMenuOpen"
+  >
+    <!-- Skip-to-content link for keyboard users -->
+    <a
+      href="#main-content"
+      class="sr-only rounded-[var(--radius-md)] bg-[var(--color-primary)] px-4 py-2 text-[var(--color-primary-foreground)] focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50"
+    >
+      {{ $t('common.skipToContent') }}
+    </a>
+
+    <AppHeader />
+
+    <main id="main-content" class="flex-1">
+      <slot />
+    </main>
+
+    <AppFooter />
+  </div>
+</template>
+```
+
+The root element is set to `inert` while the mobile drawer is open, preventing keyboard and screen-reader users from tabbing into background content. The `mobileMenuOpen` flag is a Nuxt `useState` shared between `AppMobileMenu` (which writes it) and the layout (which reads it), keeping the two decoupled without any prop drilling.
+
+---
+
+## AppHeader
+
+`AppHeader` is the sticky top bar visible on every page. It composes `AppLogo`, `AppNavbar`, `AppLanguageSwitcher`, and `AppMobileMenu` into a single `<header>` element. It reads the enabled module flags from `useSiteConfig()` to filter out navigation entries for modules that are turned off for the current agency.
+
+**Composables used:** `useSiteConfig()` for the agency module flags, `mainNavigation` from `config/navigation` for the full nav entry list.
+
+**No props.** `AppHeader` is self-contained and pulls everything it needs from configuration.
+
+### Behavior
+
+- Renders `position: sticky; top: 0; z-index: 40` so it remains visible when scrolling.
+- Applies a subtle `backdrop-blur` with a 95% opaque `--color-background` for legibility over page content.
+- Shows `AppNavbar` only on `lg` breakpoints and above; hides it on smaller screens.
+- Renders a hamburger button on screens smaller than `lg` that sets `mobileOpen = true`, which opens `AppMobileMenu`.
+- Always renders a compact `"Contact"` `BaseButton` linking to `/contact` (hidden on `xs`, visible from `sm`).
+
+### Usage context
+
+`AppHeader` is used exclusively inside `app/layouts/default.vue` as the first child of the layout wrapper. You should never place it inside a page component.
+
+```vue
+<!-- Inside app/layouts/default.vue -->
+<AppHeader />
+```
+
+---
+
+## AppNavbar
+
+`AppNavbar` renders the horizontal primary navigation links on desktop screens. It receives a pre-filtered list of `NavItem` objects from its parent (`AppHeader`) and renders them as a flex row of `NuxtLink` elements. Each link's text comes from an i18n key (`item.labelKey`), not from raw strings, so the nav automatically re-renders when the user changes locale.
+
+**Composables used:** None directly — it receives data through props.
+
+### Props
+
+<ParamField path="items" type="NavItem[]" required>
+  Array of navigation entries to render. Each entry has the following shape:
+
+  ```ts
+  interface NavItem {
+    labelKey: string          // i18n key for the link label
+    to: string                // NuxtLink route path
+    module?: keyof AgencyModulesConfig  // optional module gate
+  }
+  ```
+
+  `AppHeader` pre-filters this list so only items whose `module` is enabled in `agency.modules` are passed down.
+</ParamField>
+
+### Usage context
+
+`AppNavbar` is a child of `AppHeader`. It is hidden on mobile (`hidden lg:block`) and only appears at the `lg` breakpoint.
+
+```vue
+<!-- Inside AppHeader -->
+<AppNavbar :items="navItems" class="hidden lg:block" />
+```
+
+Active routes receive the `--color-primary` text color automatically via NuxtLink's `active-class`.
+
+---
+
+## AppMobileMenu
+
+`AppMobileMenu` is a slide-over navigation drawer for small screens. It uses `<Teleport to="body">` so it renders outside the layout's `inert` wrapper — meaning keyboard and screen-reader users can interact with the drawer even while the background page is inert. The drawer is an accessible `role="dialog"` with `aria-modal="true"`.
+
+**Accessibility features built in:**
+- Closes on `Escape` key press via `useEventListener`.
+- Locks the `<html>` scroll axis while open with `useHead`.
+- Traps focus on the close button when opened and restores focus to the previously active element (typically the hamburger button) when closed.
+- Published its open state to `useState('mobile-menu-open')` so `app/layouts/default.vue` can mark the background as `inert`.
+
+### Props
+
+<ParamField path="items" type="NavItem[]" required>
+  Array of navigation entries. Identical shape to `AppNavbar`'s `items` prop. Passed down from `AppHeader`.
+</ParamField>
+
+<ParamField path="open" type="boolean" required>
+  Controls drawer visibility. Managed by `AppHeader` via a local `mobileOpen` ref.
+</ParamField>
+
+### Emits
+
+<ParamField path="close" type="[]">
+  Emitted when the user taps the close button, clicks the backdrop overlay, or presses `Escape`. The parent (`AppHeader`) sets `mobileOpen = false` in response.
+</ParamField>
+
+### Usage context
+
+`AppMobileMenu` is rendered inside `AppHeader` just before the closing `</header>` tag. It is invisible until `open` is `true`.
+
+```vue
+<!-- Inside AppHeader -->
+<AppMobileMenu
+  :items="navItems"
+  :open="mobileOpen"
+  @close="mobileOpen = false"
+/>
+```
+
+---
+
+## AppFooter
+
+`AppFooter` renders the site footer in a three-column grid on medium screens and a single column on mobile. The three columns are: **agency branding** (logo, slogan, social links), **quick navigation links**, and **contact details** (phone, email, WhatsApp, address, business hours). All content is sourced from `useSiteConfig()` — no text or contact information is hardcoded.
+
+**Composables used:** `useSiteConfig()` for `agency.name`, `agency.slogan`, `agency.contact`, and `agency.social`. `mainNavigation` from `config/navigation` for quick links (filtered by module flags). `buildWhatsAppLink` utility from `core/utils/whatsapp-link` for the WhatsApp deep link.
+
+**No props.** `AppFooter` is fully self-contained.
+
+### Behavior
+
+- Each contact field (`phone`, `email`, `whatsapp`, `address`, `businessHours`) is guarded by a `v-if`, so footers render gracefully whether an agency has filled in all fields or only some.
+- The copyright year is computed dynamically with `new Date().getFullYear()`.
+- Social links are delegated to the `<SocialLinks>` shared component (see [Feature Components](/reference/components/feature-components)).
+- Navigation links mirror the same `mainNavigation` list used in `AppNavbar`, filtered by the same module flags, so enabling/disabling a module updates both header and footer navigation simultaneously.
+
+### Usage context
+
+`AppFooter` is used exclusively inside `app/layouts/default.vue` as the last child of the layout wrapper.
+
+```vue
+<!-- Inside app/layouts/default.vue -->
+<AppFooter />
+```
+
+---
+
+## AppLanguageSwitcher
+
+`AppLanguageSwitcher` renders a native `<select>` element populated with the locales configured in `@nuxtjs/i18n`. Selecting a new locale calls `setLocale()` from the i18n composable which performs a language-aware route navigation. A visually hidden `<label>` (`.sr-only`) names the control for assistive technology.
+
+**Composables used:** `useI18n()` — reads `locale` (current), `locales` (all available), and `setLocale` (the switcher handler).
+
+**No props.** The available locales come entirely from the i18n module configuration.
+
+### Usage context
+
+`AppLanguageSwitcher` is rendered inside `AppHeader` in the right-side action group, between the navigation and the hamburger button.
+
+```vue
+<!-- Inside AppHeader action group -->
+<div class="flex items-center gap-2">
+  <AppLanguageSwitcher />
+  <BaseButton to="/contact" size="sm">
+    {{ $t('nav.contact') }}
+  </BaseButton>
+</div>
+```
+
+The option labels use the locale `name` field from the i18n config. If only a code string is registered (no name), the code itself is displayed as the fallback.
+
+---
+
+## AppLogo
+
+`AppLogo` renders the agency's brand mark as a home-page link. It sources the logo path from `useSiteConfig().agency.logo` and renders it as a `<NuxtImg>`. When no logo path is configured, it falls back to rendering the agency name as a text wordmark, so the header and footer always have a recognizable brand element regardless of the agency's asset setup.
+
+**Composables used:** `useSiteConfig()` — reads `agency.logo` and `agency.name`.
+
+**No props.** All data comes from site configuration.
+
+### Behavior
+
+- Always renders as a `<NuxtLink to="/">` so it links back to the homepage.
+- The link's `aria-label` is set to `agency.name` so screen reader users know the link destination regardless of whether an image or text renders inside.
+- The logo image uses `agency.name` as the `alt` attribute.
+- The fallback wordmark is styled with `--color-primary` text and `font-semibold`.
+
+### Usage context
+
+`AppLogo` appears twice in the layout: inside `AppHeader` (left side of the header bar) and inside `AppFooter` (top of the branding column).
+
+```vue
+<!-- Inside AppHeader -->
+<AppLogo />
+
+<!-- Inside AppFooter branding column -->
+<AppLogo />
+<p class="mt-2 text-sm text-[var(--color-muted)]">
+  {{ agency.slogan || $t('footer.tagline') }}
+</p>
+```
