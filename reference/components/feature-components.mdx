@@ -1,7 +1,7 @@
 ---
 title: "Feature components for properties, agents, and developments"
 sidebarTitle: "Feature Components"
-description: "Domain-specific components like PropertyCard, AgentCard, DevelopmentCard, and PropertyGallery accept typed props and handle display logic without direct data fetching."
+description: "Domain-specific components like PropertyCard, AgentCard, and DevelopmentCard accept typed props and handle display logic without direct data fetching."
 ---
 
 Feature components are the domain-aware layer of the template. Unlike the generic `Base*` primitives, they understand real estate concepts — properties, agents, developments — but still follow a strict rule: **they never fetch their own data**. Every feature component receives a typed prop and renders it. Data fetching belongs in page-level composables or feature services. This separation makes the components trivially testable and reusable in any context (search results, featured sections, detail sidebars) without coupling them to a specific data source.

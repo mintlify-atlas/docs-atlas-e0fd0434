@@ -1,7 +1,7 @@
 ---
-title: "AgencyConfig interface and field reference"
+title: "AgencyConfig: agency identity and configuration reference"
 sidebarTitle: "AgencyConfig"
-description: "AgencyConfig is the central configuration object controlling agency identity, contact details, social links, enabled modules, currency, and theme selection."
+description: "Central config object for agency identity, contact details, social links, feature modules, currency, measurement unit, and theme selection."
 ---
 
 `AgencyConfig` is the single source of truth for everything that varies between real estate agencies: identity, contact details, social presence, feature modules, locale settings, currency, measurement units, and the active theme. It is defined in `app/types/agency.types.ts` and consumed exclusively through the `useSiteConfig()` composable — components must never hardcode agency data. The file `app/config/agencies/default.agency.ts` ships a complete placeholder configuration that demonstrates every field; copy and rename it to create a new agency identity.
@@ -155,7 +155,14 @@ The file `app/config/agencies/agency.schema.ts` provides runtime validation for 
 
 ### `validateAgencyConfig(agency, deps)`
 
-Strict variant. Throws a `ZodError` on any structural or cross-config failure. Returns `{ agency, warnings }` on success.
+```ts
+function validateAgencyConfig(
+  agency: AgencyConfig,
+  deps: ValidateAgencyConfigDeps,
+): ValidateAgencyConfigResult
+```
+
+Strict variant. Throws a `ZodError` on any structural or cross-config failure. Returns `{ agency, warnings }` on success. The first parameter must be an already-typed `AgencyConfig` object (use `safeParseAgencyConfig` when the input is `unknown`).
 
 ```ts
 import { validateAgencyConfig } from '~/config/agencies/agency.schema'
@@ -174,7 +181,14 @@ if (warnings.length > 0) {
 
 ### `safeParseAgencyConfig(agency, deps)`
 
-Non-throwing variant. Returns a tagged discriminated union so callers can handle validation errors without a try/catch:
+```ts
+function safeParseAgencyConfig(
+  agency: unknown,
+  deps: ValidateAgencyConfigDeps,
+): SafeParseAgencyConfigResult
+```
+
+Non-throwing variant. The first parameter is typed `unknown` — use this when the input may not yet conform to `AgencyConfig` (e.g. a raw JSON payload from a CMS or a multi-tenant config loader). Returns a tagged discriminated union so callers can handle validation errors without a try/catch:
 
 ```ts
 export type SafeParseAgencyConfigResult =

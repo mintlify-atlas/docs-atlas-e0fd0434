@@ -1,7 +1,7 @@
 ---
-title: "Customize the visual theme with design tokens"
+title: "Customize the site visual theme with design tokens"
 sidebarTitle: "Theming"
-description: "Define colors, typography, radius, shadows, and layout tokens in a ThemeConfig object. Tokens are serialized to CSS variables at runtime for zero-component-edit rebranding."
+description: "Declare design tokens in ThemeConfig. The theme plugin turns them into CSS variables at SSR time, letting you restyle the entire site by editing one file."
 ---
 
 The template's theme system is built around a single principle: every visual decision that could vary between agencies is expressed as a named design token, never as a hardcoded Tailwind class inside a component. A `ThemeConfig` TypeScript object is the single source of truth. At startup, the `theme.ts` Nuxt plugin calls `themeToCssVars()` to serialize the entire object into a `:root { … }` CSS block and inject it into the page `<head>` — both during SSR and on the client. Components then consume tokens exclusively through CSS custom properties (`var(--color-primary)`, `var(--radius-md)`, etc.), which means changing the entire visual identity of the site requires editing one TypeScript file with zero component modifications.

@@ -1,7 +1,7 @@
 ---
-title: "Agent data model for team member profiles"
+title: "Agent data model for real estate team member profiles"
 sidebarTitle: "Agent"
-description: "The Agent interface models a real estate agent or team member. Fields include contact details, portrait image, role, short bio, and optional specialty tags."
+description: "Domain model for team member profiles. Covers required identity and image fields, optional contact channels, and optional specialty tags."
 ---
 
 The `Agent` interface models an individual real estate agent or team member whose profile is displayed in the agency's team section. Agent records drive the team roster on the agents page and, when `AgencyConfig.modules.agents` is enabled, appear in the site navigation. The interface lives at `app/features/agents/types/agent.types.ts` and is designed to be backend-friendly: the static MVP data in `app/features/agents/data/agents.ts` can be replaced by an API response without changing any component that consumes agent data.

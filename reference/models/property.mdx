@@ -1,7 +1,7 @@
 ---
-title: "Property data model and Zod schema reference"
+title: "Property data model and Zod schema – field reference"
 sidebarTitle: "Property"
-description: "The Property interface defines the full shape of a real estate listing. Includes operationType, propertyType, status unions, optional size fields, and coordinate support."
+description: "Core domain model for real estate listings. Covers PropertyOperationType, PropertyType, PropertyStatus unions, optional size fields, and the Zod schema."
 ---
 
 The `Property` interface is the core domain model of the template. Every listing card, detail page, sitemap entry, and JSON-LD block is derived from this shape. The interface lives at `app/features/properties/types/property.types.ts` and is intentionally backend-friendly: the same fields map cleanly to a typical CMS or REST API response, so the static MVP data can be swapped for a real data source later without touching any component. A matching Zod schema (`propertySchema`) validates every record at module load, ensuring that structural errors are caught before they reach the UI.

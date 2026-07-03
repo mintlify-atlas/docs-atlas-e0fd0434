@@ -1,7 +1,7 @@
 ---
-title: "propertiesService: filtering, sorting, and lookup"
+title: "propertiesService: property filtering, sorting, lookup"
 sidebarTitle: "propertiesService"
-description: "propertiesService is the single data access layer for the property catalog. Methods cover listing, slug lookup, filtered queries, featured sets, and related properties."
+description: "Single data-access layer for the property catalog. Covers getAll, getBySlug, filter with accent-insensitive search, getFeatured, and scored getRelated."
 ---
 
 `propertiesService` is the **single point of entry** for all property data in the template. Every page and component that needs property records must go through this service — reading from `sampleProperties` directly is explicitly prohibited. This design means the backing data source can be swapped from the static MVP array to an API call (e.g. `$fetch('/api/properties')`) without touching a single component: only the service implementation changes.
@@ -139,7 +139,7 @@ if (!property) {
 ### `filter()`
 
 ```ts
-filter(filters: PropertyFilters, sort?: PropertySort): Property[]
+filter(filters: PropertyFilters, sort: PropertySort = 'featured'): Property[]
 ```
 
 Filters the **visible** catalog by a typed set of criteria and returns the sorted result. Hidden properties are always excluded before filtering begins. Empty or `undefined` filter values are treated as "no constraint" so passing an unsanitized `route.query` object is safe.
@@ -229,10 +229,10 @@ const featuredProperties = propertiesService.getFeatured(3)
 ### `getRelated()`
 
 ```ts
-getRelated(current: Property, limit?: number): Property[]
+getRelated(current: Property, limit: number = 3): Property[]
 ```
 
-Finds properties similar to `current` using a weighted scoring model over the visible catalog. The result is used by the related-properties section on the property detail page. Sold, rented, hidden, and reserved-but-zero-score properties are excluded. The `current` property itself is always excluded from results.
+Finds properties similar to `current` using a weighted scoring model over the visible catalog. The result is used by the related-properties section on the property detail page. Only `available` and `reserved` properties are eligible candidates — sold, rented, and hidden properties are never surfaced. The `current` property itself is always excluded from results.
 
 <ParamField path="current" type="Property" required>
   The reference property. Its `propertyType`, `operationType`, `city`, `country`, `developmentId`, `agentId`, and `price` fields drive the scoring weights.

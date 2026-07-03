@@ -1,7 +1,7 @@
 ---
-title: "Development data model for new-build projects"
+title: "Development data model for new-build project listings"
 sidebarTitle: "Development"
-description: "The Development interface models a residential development or project. Covers status, price range, area range, delivery date, and optional unit and bedroom counts."
+description: "Domain model for new-build projects. Covers DevelopmentStatus union, price range, area range, delivery date, and per-record sizeUnit fallback."
 ---
 
 The `Development` interface models a residential or mixed-use project — such as a condominium tower, housing estate, or pre-sale community — as a distinct entity separate from individual property listings. A development can surface in homepage showcase sections, a dedicated developments gallery, and as the parent context for properties that carry a matching `developmentId`. The interface lives at `app/features/developments/types/development.types.ts` and follows the same backend-friendly design as `Property`: static MVP data can be replaced by an API response without modifying any component.

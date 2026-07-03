@@ -1,7 +1,7 @@
 ---
-title: "App layout components and shell structure"
+title: "App layout components: header, navbar, footer, and shell"
 sidebarTitle: "Layout Components"
-description: "The App* layout components build the site shell: header, navbar, footer, mobile menu, language switcher, and logo. All read agency data via useSiteConfig()."
+description: "App* layout components build the site shell: header, navbar, footer, mobile menu, language switcher, and logo. All read agency data via useSiteConfig()."
 ---
 
 The `App*` layout components assemble the site shell that wraps every public page of the template. They live in `app/components/layout/` and are prefixed with `App` to distinguish them from business-feature components. Unlike the generic `Base*` UI primitives, layout components are allowed — and expected — to consume agency configuration from the `useSiteConfig()` composable, navigation from `config/navigation`, and locale data from `@nuxtjs/i18n`. The key architectural rule they enforce is that **no agency-specific text or branding is ever hardcoded** inside a component: logos come from `agency.logo`, slogans from `agency.slogan`, navigation labels from i18n keys, and contact details from `agency.contact`.

@@ -1,7 +1,7 @@
 ---
-title: "Replace sample data with real agency content"
+title: "Replace placeholder data files with agency content"
 sidebarTitle: "Data & Content"
-description: "Swap the six placeholder data files with real properties, agents, developments, testimonials, locations, and stats. Zod validates every record at module load."
+description: "Supply real agency content in six TypeScript data files. Zod validates each record at module load so bad data is caught in development, not in production."
 ---
 
 The template ships with six data files containing placeholder agency content — fictional properties in Mexican cities, sample agents with generic names, and approximate statistics. Every piece of this content is intentionally generic so a real agency can replace it without touching a single component. The files are plain TypeScript arrays of typed objects. Once you swap them out, all pages, cards, filters, sitemaps, and JSON-LD structured data update automatically. The data shapes are enforced by Zod schemas at module load, so a typo in an `operationType` value or a missing required field fails fast with a clear error message before the app ever serves a request.

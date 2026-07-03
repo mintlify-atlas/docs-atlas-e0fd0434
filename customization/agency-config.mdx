@@ -1,7 +1,7 @@
 ---
-title: "Configure your agency identity and settings"
+title: "Configure your agency identity and module settings"
 sidebarTitle: "Agency Config"
-description: "Edit a single TypeScript file to set your agency name, logo, contact details, currency, measurement unit, and enabled modules without changing any component."
+description: "Edit one TypeScript file to set your agency name, logo, contact details, currency, measurement unit, and enabled modules. No component changes required."
 ---
 
 Every piece of agency-specific identity — from the display name and logo path down to the WhatsApp number and which site modules are active — lives in one place: `app/config/agencies/default.agency.ts`. Components never hardcode any of these values. Instead they read the config through the `useSiteConfig()` composable, which returns the validated, fully-typed object that `site.config.ts` builds at module load. The result is a clean contract: rebrand the site by editing one file, and every layout, header, footer, SEO tag, and structured-data block updates automatically.
@@ -211,7 +211,7 @@ export const defaultAgencyConfig: AgencyConfig = {
 
 ### Social object
 
-All social fields are optional. The footer hides icons for any platform whose value is omitted or empty. Provide full HTTPS URLs for best SEO practice — the validator warns (but does not throw) for `http://` or `www.` prefixes.
+All social fields are optional. The footer hides icons for any platform whose value is omitted or empty. Provide full HTTPS URLs for best SEO practice — the validator warns (but does not throw) when a URL is supplied without any recognized prefix (`http://`, `https://`, or `www.`).
 
 <ParamField path="social.facebook" type="string">Full Facebook page URL.</ParamField>
 <ParamField path="social.instagram" type="string">Full Instagram profile URL.</ParamField>
@@ -263,7 +263,7 @@ All social fields are optional. The footer hides icons for any platform whose va
 - Any `social.*` URL does not start with `https://`, `http://`, or `www.`
 
 <Note>
-  The shipped `default.agency.ts` intentionally triggers **five `console.warn` messages** at startup — one for each social platform whose placeholder URL starts with `http://www.` instead of `https://`. These warnings are by design: they document exactly what a real agency needs to update when rebranding. You will see messages like `[agency] social.facebook "http://www.facebook.com/youragency" should start with "http://", "https://" or "www."` in the dev console until you replace the placeholder URLs with your real HTTPS social links.
+  The shipped `default.agency.ts` produces **no format warnings** at startup. All five social placeholder URLs already begin with `http://`, which satisfies the `URL_PREFIX_RE` check in the validator. Format warnings appear only when a social URL is supplied without any URL prefix — for example, `'facebook.com/youragency'` would trigger `[agency] social.facebook "facebook.com/youragency" should start with "http://", "https://" or "www."`. Upgrade your placeholder URLs to `https://` when rebranding to follow best practice.
 </Note>
 
 <Tip>

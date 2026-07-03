@@ -13,21 +13,10 @@ The `features/properties/` directory is the most complete feature in the templat
 ```txt
 features/
 └── properties/
-    ├── api/                       # (future) $fetch wrappers for API endpoints
-    │   ├── get-properties.ts
-    │   └── get-property.ts
-    │
     ├── components/                # Domain-aware Vue components
     │   ├── PropertyCard.vue       # Single property card (receives Property prop)
-    │   ├── PropertyFilters.vue    # Filter controls (emits filter changes)
     │   ├── PropertyGallery.vue    # Image gallery / lightbox
-    │   ├── PropertyFeatures.vue   # Bedrooms / bathrooms / size grid
-    │   ├── PropertyMap.vue        # Location map embed
-    │   ├── PropertyContactForm.vue
     │   └── PropertyGrid.vue       # Responsive grid of PropertyCard instances
-    │
-    ├── composables/
-    │   └── useProperties.ts       # Reactive wrapper around the service
     │
     ├── constants/
     │   └── property-types.ts      # PROPERTY_TYPE_OPTIONS, OPERATION_TYPE_OPTIONS
@@ -41,18 +30,12 @@ features/
     ├── services/
     │   └── properties.service.ts  # Business logic: getAll, getBySlug, filter, …
     │
-    ├── stores/
-    │   └── properties.store.ts    # Pinia store for reactive listing state
-    │
-    ├── types/
-    │   └── property.types.ts      # TypeScript domain types (canonical shape)
-    │
-    └── utils/
-        └── property.helpers.ts    # Feature-local pure helpers
+    └── types/
+        └── property.types.ts      # TypeScript domain types (canonical shape)
 ```
 
 <Note>
-  Not every feature uses every folder. Only create folders when there is code to put in them. The `contact/` feature, for example, has no data layer and no store — it only has a component, a schema, and a service.
+  Not every feature uses every folder. Only create folders when there is code to put in them. The `leads/` and `search/` features, for example, are stubs today — they contain only a `.gitkeep` placeholder and will gain components, services, and types as the feature is built out.
 </Note>
 
 ## The properties feature in detail
@@ -63,6 +46,7 @@ The TypeScript interfaces are the authoritative shape for the domain. They are b
 
 ```ts
 // features/properties/types/property.types.ts
+import type { MeasurementUnit } from '~/types/agency.types'
 
 export type PropertyOperationType = 'sale' | 'rent'
 
@@ -79,6 +63,11 @@ export type PropertyStatus =
   | 'rented'
   | 'reserved'
   | 'hidden'
+
+export interface PropertyCoordinates {
+  lat: number
+  lng: number
+}
 
 export interface Property {
   id: string
@@ -117,14 +106,47 @@ The Zod schema mirrors the TypeScript interfaces and acts as the **runtime bound
 ```ts
 // features/properties/schemas/property.schema.ts
 import { z } from 'zod'
+import type { Property, PropertyType, PropertyOperationType, PropertyStatus } from '../types/property.types'
+import type { MeasurementUnit } from '~/types/agency.types'
+
+export const propertyOperationTypeSchema = z.enum([
+  'sale',
+  'rent',
+]) satisfies z.ZodType<PropertyOperationType>
+
+export const propertyTypeSchema = z.enum([
+  'house',
+  'apartment',
+  'land',
+  'commercial',
+  'office',
+]) satisfies z.ZodType<PropertyType>
+
+export const propertyStatusSchema = z.enum([
+  'available',
+  'sold',
+  'rented',
+  'reserved',
+  'hidden',
+]) satisfies z.ZodType<PropertyStatus>
+
+export const propertySizeUnitSchema = z.enum([
+  'metric',
+  'imperial',
+]) satisfies z.ZodType<MeasurementUnit>
+
+export const propertyCoordinatesSchema = z.object({
+  lat: z.number(),
+  lng: z.number(),
+})
 
 export const propertySchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
   slug: z.string().min(1),
   description: z.string().min(1),
-  operationType: z.enum(['sale', 'rent']),
-  propertyType: z.enum(['house', 'apartment', 'land', 'commercial', 'office']),
+  operationType: propertyOperationTypeSchema,
+  propertyType: propertyTypeSchema,
   price: z.number().nonnegative(),
   currency: z.string().min(1),
   location: z.string().min(1),
@@ -134,7 +156,7 @@ export const propertySchema = z.object({
   bedrooms: z.number().int().nonnegative().optional(),
   bathrooms: z.number().nonnegative().optional(),
   parkingSpaces: z.number().int().nonnegative().optional(),
-  sizeUnit: z.enum(['metric', 'imperial']).optional(),
+  sizeUnit: propertySizeUnitSchema.optional(),
   constructionSize: z.number().nonnegative().optional(),
   landSize: z.number().nonnegative().optional(),
   images: z.array(z.string().min(1)),
@@ -142,8 +164,8 @@ export const propertySchema = z.object({
   amenities: z.array(z.string().min(1)),
   developmentId: z.string().optional(),
   agentId: z.string().optional(),
-  coordinates: z.object({ lat: z.number(), lng: z.number() }).optional(),
-  status: z.enum(['available', 'sold', 'rented', 'reserved', 'hidden']),
+  coordinates: propertyCoordinatesSchema.optional(),
+  status: propertyStatusSchema,
   featured: z.boolean(),
 })
 
@@ -372,13 +394,13 @@ const properties = propertiesService.filter(filters, sort)
 
 <CardGroup cols={3}>
   <Card title="agents/" icon="user">
-    `AgentCard`, `AgentGrid` components. `agentsService.getAll()` and `getBySlug()`. Types define `Agent` with `name`, `slug`, `phone`, `email`, `bio`, `photo`, and `agentId`.
+    `AgentCard` component. Static data in `data/agents.ts`. Types define `Agent` with `id`, `name`, `role`, `bio`, `image`, and optional `phone`, `email`, `whatsapp`, and `specialties`.
   </Card>
   <Card title="developments/" icon="building">
-    `DevelopmentCard`, `DevelopmentGallery` components. `developmentsService` with similar filter/getBySlug surface. Properties link back via `developmentId`.
+    `DevelopmentCard` component. Static data in `data/developments.ts`. Types define `Development` with `id`, `name`, `slug`, `status`, `location`, and pricing fields. Properties link back via `developmentId`.
   </Card>
   <Card title="home/" icon="house">
-    Homepage-specific section components (`HomeHero`, `HomeFeatured`, `HomeLocations`). No store — composed from `propertiesService.getFeatured()` called at the page level.
+    Homepage-specific section components (`HomeHero`, `HomeFeaturedProperties`, `HomeLocations`, `HomeCategories`, `HomeSearchBar`, and more). No store — sections are composed from service calls at the page level.
   </Card>
 </CardGroup>
 

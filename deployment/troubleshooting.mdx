@@ -1,7 +1,7 @@
 ---
 title: "Troubleshooting common Real Estate Template issues"
 sidebarTitle: "Troubleshooting"
-description: "Solutions to common setup and deployment problems: missing logo, wrong currency, broken nav links, canonical URL issues, and Zod validation errors at startup."
+description: "Fix common Real Estate Template issues: missing logo, wrong currency, broken nav links, canonical URL errors, and Zod validation failures on startup."
 ---
 
 Most issues with the Real Estate Template fall into one of three categories: a misconfigured agency config object, a missing or incorrect `NUXT_PUBLIC_SITE_URL` environment variable, or a mismatch between the data files and their Zod schemas. The items below cover the most common problems encountered during rebranding and deployment, along with the exact source of truth for each setting and how to fix it.
@@ -82,15 +82,18 @@ Most issues with the Real Estate Template fall into one of three categories: a m
   <Accordion title="Colors don't apply">
     **Symptom:** Buttons, links, and accent elements still show the default template color instead of the agency's configured primary color.
 
-    **Cause:** There are three possible causes, in order of likelihood:
+    **Cause:** There are two possible causes, in order of likelihood:
 
-    1. `agency.theme` does not match a registered theme id in `app/themes/index.ts`.
-    2. The `data-theme` attribute is not being set on the `<html>` element.
-    3. Components are using hardcoded Tailwind palette classes (e.g. `bg-teal-700`) instead of CSS custom property classes (e.g. `bg-primary`).
+    1. The `data-theme` attribute is not being set on the `<html>` element, or the resolved theme id is unexpected.
+    2. Components are using hardcoded Tailwind palette classes (e.g. `bg-teal-700`) instead of CSS custom property classes (e.g. `bg-primary`).
+
+    <Note>
+      If `agency.theme` references an id that is **not** registered in `app/themes/index.ts`, `validateAgencyConfig()` throws a `ZodError` at startup — the app will not boot at all. That scenario is covered by the **App won't boot (ZodError at startup)** item below, not here.
+    </Note>
 
     **Fix:**
-    1. Confirm `agency.theme` in the agency config exactly matches an id registered in `app/themes/index.ts`. A typo causes `resolveTheme()` to silently fall back to the default theme — no error is thrown.
-    2. Open browser DevTools, inspect the `<html>` element, and confirm it has a `data-theme` attribute. The `theme.ts` plugin sets this from the resolved theme id on app mount.
+    1. Confirm `agency.theme` in the agency config exactly matches an id registered in `app/themes/index.ts`. An unregistered id causes a `ZodError` crash at startup (see the ZodError item below), not a silent color change.
+    2. Open browser DevTools, inspect the `<html>` element, and confirm it has a `data-theme` attribute set to the expected theme id. The `theme.ts` plugin sets `data-theme` from the resolved theme id during SSR and on app mount — if it is missing, the plugin may not be running.
     3. If you are customizing a component, ensure it uses `var(--color-primary)` or utility classes mapped to CSS variables, not raw Tailwind color classes.
 
     To create a custom theme, add a new file (e.g. `app/themes/luxury.theme.ts`), register it in `app/themes/index.ts`, and set `agency.theme: 'luxury'` in the agency config.

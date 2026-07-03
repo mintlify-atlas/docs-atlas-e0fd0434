@@ -1,7 +1,7 @@
 ---
-title: "usePageSeo() and useJsonLd(): per-page SEO setup"
+title: "usePageSeo() and useJsonLd(): per-page SEO reference"
 sidebarTitle: "usePageSeo"
-description: "usePageSeo() sets per-page title, description, canonical URL, Open Graph, and Twitter meta. useJsonLd() injects schema.org structured data as a JSON-LD script block."
+description: "Centralizes site URL, canonical URL, Open Graph image, Twitter card, and og:locale for every page. useJsonLd() injects schema.org JSON-LD into the head."
 ---
 
 Every page in the template needs the same boilerplate: strip the trailing slash from `siteUrl`, build an absolute URL for the canonical link, resolve the social image, set the Twitter card type, and read the active locale for `og:locale`. `usePageSeo()` centralizes all of that infrastructure so pages never duplicate it. Each page still calls `useSeoMeta()` and `useHead()` itself — keeping the title, description, and any page-specific overrides (like `ogType: 'article'` on the property detail page) explicitly readable at the call site. `useJsonLd()` is a thin companion that handles the `<script type="application/ld+json">` boilerplate so pages just pass their schema.org payload.
@@ -238,7 +238,7 @@ Each page in the template emits a schema.org structured data block appropriate t
 |---|---|---|
 | `/` (home) | `RealEstateAgent` | Agency identity node — `@id` set to `toAbsoluteUrl('/')` for cross-page graph consistency |
 | `/properties` | `ItemList` (of `ListItem`) | One `ListItem` per visible property in the current filtered result set |
-| `/properties/[slug]` | `RealEstateListing` | Detail page; availability mapped from `PropertyStatus`; `floorSize` with UN/CEFACT unit code |
+| `/properties/[slug]` | `RealEstateListing` + `ItemList` (of `ListItem`) | Detail page: `RealEstateListing` with `floorSize` as a `QuantitativeValue` carrying an explicit UN/CEFACT `unitCode`, plus a separate `ItemList` of `ListItem` for the related properties (one per related card; `itemListElement` is `[]` when there are no related properties) |
 | `/agents` | `ItemList` (of `Person`) | Each `Person` has a `worksFor: RealEstateAgent` back-reference to the agency home page |
 | `/contact` | `ContactPage` | `mainEntity` is a `RealEstateAgent` node with the same `@id` as the home page |
 | `/about` | `AboutPage` | `mainEntity` is a `RealEstateAgent` node consistent with the home and contact pages |

@@ -1,7 +1,7 @@
 ---
-title: "Enable and disable features with module toggles"
+title: "Enable and disable site features with module toggles"
 sidebarTitle: "Modules"
-description: "Control which sections appear on the site by flipping boolean flags in the agency config modules object. Navigation, footer, homepage sections, and sitemap all respond automatically."
+description: "Flip boolean flags in the agency config modules object to show or hide features. Navigation, footer, homepage sections, and sitemap respond automatically."
 ---
 
 The template is built to serve agencies with very different feature needs — a large multi-agent brokerage wants a full team directory, developments portfolio, and blog, while a solo agent might only need properties and a contact page. Rather than deleting components or routes for unwanted features, the template uses a `modules` object in the agency config that acts as a set of runtime flags. Layout components, the homepage, the footer, and the sitemap all read these flags and hide or show sections automatically, with no component editing required.

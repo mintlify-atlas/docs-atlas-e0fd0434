@@ -1,7 +1,7 @@
 ---
 title: "useSiteConfig(): access agency and theme at runtime"
 sidebarTitle: "useSiteConfig"
-description: "useSiteConfig() returns the active SiteConfig (agency identity + resolved ThemeConfig) via Nuxt useState, making it SSR-safe and reactive across all components."
+description: "Returns the active SiteConfig (agency identity plus resolved ThemeConfig) via Nuxt useState. SSR-safe and reactive; never import siteConfig directly."
 ---
 
 `useSiteConfig()` is the single composable every component uses to read the active agency identity and its resolved theme tokens at runtime. It is backed by Nuxt's `useState` primitive, which means the value is serialized into the SSR payload and rehydrated on the client without an extra network round-trip — no flash of unstyled content, no mismatch between server and client renders. Components must **never** import `siteConfig` directly from `~/config/site.config`; always go through `useSiteConfig()` so a future multi-tenant loader can swap the active agency without changing any component.
